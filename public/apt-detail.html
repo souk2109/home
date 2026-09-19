@@ -35,6 +35,10 @@
 					<input type="text" name="houseName" placeholder="예: 다우아트리체" />
 				</label>
 				<label>
+					제외할 지역 (쉼표로 구분)
+					<input type="text" name="excludeAreas" placeholder="예: 평택, 안성" />
+				</label>
+				<label>
 					모집공고일(시작)
 					<input type="date" name="dateFrom" />
 				</label>
@@ -251,11 +255,19 @@
 					);
 
 					allRows = results.flatMap((body) => body.data ?? []);
-					allRows.sort((a, b) => (b.RCRIT_PBLANC_DE ?? "").localeCompare(a.RCRIT_PBLANC_DE ?? ""));
-					// totalCount는 조건과 무관한 전체 데이터셋 크기라 의미 없음 — 실제 조건 매칭 건수는 matchCount
-					const matchTotal = results.reduce((sum, body) => sum + (body.matchCount ?? 0), 0);
 
-					statusEl.textContent = `서울·경기 조건에 맞는 ${matchTotal}건 (페이지당 ${PAGE_SIZE}건, 카드를 눌러 상세보기)`;
+					// API에는 지역 제외(NOT LIKE) 조건이 없어서, 공급위치에 제외 키워드가 포함된 건을 여기서 직접 걸러낸다
+					const excludeKeywords = (formData.get("excludeAreas") ?? "")
+						.split(",")
+						.map((keyword) => keyword.trim())
+						.filter(Boolean);
+					if (excludeKeywords.length > 0) {
+						allRows = allRows.filter((row) => !excludeKeywords.some((keyword) => row.HSSPLY_ADRES?.includes(keyword)));
+					}
+
+					allRows.sort((a, b) => (b.RCRIT_PBLANC_DE ?? "").localeCompare(a.RCRIT_PBLANC_DE ?? ""));
+
+					statusEl.textContent = `서울·경기 조건에 맞는 ${allRows.length}건 (페이지당 ${PAGE_SIZE}건, 카드를 눌러 상세보기)`;
 					renderPage(1);
 				} catch (err) {
 					statusEl.textContent = `오류: ${err.message}`;
