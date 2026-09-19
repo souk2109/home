@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>APT 분양정보 조회</title>
+		<link rel="stylesheet" href="/assets/site.css" />
+		<link rel="stylesheet" href="/assets/search-page.css" />
+	</head>
+	<body>
+		<header class="site-header">
+			<div class="container header-inner">
+				<a href="/" class="brand">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M3 11l9-8 9 8" />
+						<path d="M5 10v10a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-5h2v5a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10" />
+					</svg>
+					청약 정보
+				</a>
+				<nav>
+					<a href="/">홈</a>
+					<a href="/apt-detail">APT 분양정보</a>
+					<a href="#" id="logout-link">로그아웃</a>
+				</nav>
+			</div>
+		</header>
+
+		<main class="container">
+			<h1 class="page-title">APT 분양정보 조회</h1>
+			<p class="page-note">공급지역: 서울 · 경기만 조회합니다. 접수마감이 지난 공고는 제외됩니다.</p>
+
+			<form id="search-form">
+				<label>
+					주택명
+					<input type="text" name="houseName" placeholder="예: 다우아트리체" />
+				</label>
+				<label>
+					모집공고일(시작)
+					<input type="date" name="dateFrom" />
+				</label>
+				<label>
+					모집공고일(종료)
+					<input type="date" name="dateTo" />
+				</label>
+				<button type="submit">조회</button>
+			</form>
+
+			<div id="status"></div>
+			<div id="result"></div>
+			<div id="pagination" class="pagination"></div>
+		</main>
+
+		<footer class="site-footer">
+			<div class="container">
+				<p>데이터 출처: 국토교통부 청약홈 Open API (공공데이터포털) · 매일 갱신 · 서울·경기 지역만 표시</p>
+			</div>
+		</footer>
+
+		<script src="/assets/logout.js" defer></script>
+		<script>
+			const form = document.getElementById("search-form");
+			const statusEl = document.getElementById("status");
+			const resultEl = document.getElementById("result");
+			const paginationEl = document.getElementById("pagination");
+
+			const PAGE_SIZE = 15;
+			const FETCH_LIMIT = 100; // 지역별 최대 수집 건수 (접수마감 안지난 공고만 다루므로 충분한 여유치)
+
+			let allRows = [];
+			let currentPage = 1;
+
+			// 카드 요약 영역에 노출하는 필드 (나머지는 펼침 시 표시)
+			const SUMMARY_KEYS = new Set([
+				"HOUSE_NM",
+				"SUBSCRPT_AREA_CODE_NM",
+				"RCRIT_PBLANC_DE",
+				"RCEPT_BGNDE",
+				"RCEPT_ENDDE",
+			]);
+
+			// API 응답 필드 전체(49개) 한글 라벨
+			const LABELS = {
+				HOUSE_MANAGE_NO: "주택관리번호",
+				PBLANC_NO: "공고번호",
+				HOUSE_NM: "주택명",
+				HOUSE_SECD: "주택구분코드",
+				HOUSE_SECD_NM: "주택구분",
+				HOUSE_DTL_SECD: "주택상세구분코드",
+				HOUSE_DTL_SECD_NM: "주택상세구분",
+				RENT_SECD: "분양구분코드",
+				RENT_SECD_NM: "분양구분",
+				SUBSCRPT_AREA_CODE: "공급지역코드",
+				SUBSCRPT_AREA_CODE_NM: "공급지역",
+				HSSPLY_ZIP: "공급위치 우편번호",
+				HSSPLY_ADRES: "공급위치",
+				TOT_SUPLY_HSHLDCO: "공급규모",
+				RCRIT_PBLANC_DE: "모집공고일",
+				NSPRC_NM: "신문사",
+				RCEPT_BGNDE: "청약접수시작일",
+				RCEPT_ENDDE: "청약접수종료일",
+				SPSPLY_RCEPT_BGNDE: "특별공급 접수시작일",
+				SPSPLY_RCEPT_ENDDE: "특별공급 접수종료일",
+				GNRL_RNK1_CRSPAREA_RCPTDE: "1순위 해당지역 접수시작일",
+				GNRL_RNK1_CRSPAREA_ENDDE: "1순위 해당지역 접수종료일",
+				GNRL_RNK1_ETC_GG_RCPTDE: "1순위 경기지역 접수시작일",
+				GNRL_RNK1_ETC_GG_ENDDE: "1순위 경기지역 접수종료일",
+				GNRL_RNK1_ETC_AREA_RCPTDE: "1순위 기타지역 접수시작일",
+				GNRL_RNK1_ETC_AREA_ENDDE: "1순위 기타지역 접수종료일",
+				GNRL_RNK2_CRSPAREA_RCPTDE: "2순위 해당지역 접수시작일",
+				GNRL_RNK2_CRSPAREA_ENDDE: "2순위 해당지역 접수종료일",
+				GNRL_RNK2_ETC_GG_RCPTDE: "2순위 경기지역 접수시작일",
+				GNRL_RNK2_ETC_GG_ENDDE: "2순위 경기지역 접수종료일",
+				GNRL_RNK2_ETC_AREA_RCPTDE: "2순위 기타지역 접수시작일",
+				GNRL_RNK2_ETC_AREA_ENDDE: "2순위 기타지역 접수종료일",
+				PRZWNER_PRESNATN_DE: "당첨자발표일",
+				CNTRCT_CNCLS_BGNDE: "계약시작일",
+				CNTRCT_CNCLS_ENDDE: "계약종료일",
+				HMPG_ADRES: "홈페이지",
+				CNSTRCT_ENTRPS_NM: "시공사",
+				MDHS_TELNO: "문의처",
+				BSNS_MBY_NM: "시행사",
+				MVN_PREARNGE_YM: "입주예정월",
+				SPECLT_RDN_EARTH_AT: "투기과열지구",
+				MDAT_TRGET_AREA_SECD: "조정대상지역",
+				PARCPRC_ULS_AT: "분양가상한제",
+				IMPRMN_BSNS_AT: "정비사업",
+				PUBLIC_HOUSE_EARTH_AT: "공공주택지구",
+				LRSCL_BLDLND_AT: "대규모 택지개발지구",
+				NPLN_PRVOPR_PUBLIC_HOUSE_AT: "수도권 내 민영 공공주택지구",
+				PUBLIC_HOUSE_SPCLW_APPLC_AT: "공공주택 특별법 적용여부",
+				PBLANC_URL: "청약홈 상세페이지",
+			};
+
+			// Y/N 플래그 필드는 예/아니오로 표시
+			const YN_KEYS = new Set([
+				"SPECLT_RDN_EARTH_AT",
+				"MDAT_TRGET_AREA_SECD",
+				"PARCPRC_ULS_AT",
+				"IMPRMN_BSNS_AT",
+				"PUBLIC_HOUSE_EARTH_AT",
+				"LRSCL_BLDLND_AT",
+				"NPLN_PRVOPR_PUBLIC_HOUSE_AT",
+				"PUBLIC_HOUSE_SPCLW_APPLC_AT",
+			]);
+
+			const LINK_KEYS = new Set(["PBLANC_URL", "HMPG_ADRES"]);
+
+			function formatValue(key, value) {
+				if (value === null || value === undefined || value === "") return "-";
+				if (YN_KEYS.has(key)) return value === "Y" ? "예" : "아니오";
+				if (LINK_KEYS.has(key)) {
+					const safeHref = String(value).replace(/"/g, "&quot;");
+					return `<a href="${safeHref}" target="_blank" rel="noopener">바로가기</a>`;
+				}
+				return String(value);
+			}
+
+			// 이 프로젝트는 서울·경기 매물만 다룬다 (다른 API 화면도 동일하게 적용)
+			const REGIONS = ["서울", "경기"];
+
+			function buildQuery(formData, region) {
+				const params = new URLSearchParams();
+				params.set("page", "1");
+				params.set("perPage", String(FETCH_LIMIT));
+				params.set("cond[SUBSCRPT_AREA_CODE_NM::EQ]", region);
+
+				// 접수마감(RCEPT_ENDDE)이 지난 공고는 기본 제외
+				const today = new Date().toISOString().slice(0, 10);
+				params.set("cond[RCEPT_ENDDE::GTE]", today);
+
+				const houseName = formData.get("houseName")?.trim();
+				if (houseName) params.set("cond[HOUSE_NM::LIKE]", houseName);
+
+				const dateFrom = formData.get("dateFrom");
+				if (dateFrom) params.set("cond[RCRIT_PBLANC_DE::GTE]", dateFrom);
+
+				const dateTo = formData.get("dateTo");
+				if (dateTo) params.set("cond[RCRIT_PBLANC_DE::LTE]", dateTo);
+
+				return params;
+			}
+
+			function renderCards(rows) {
+				if (rows.length === 0) {
+					resultEl.innerHTML = "<p>조회된 결과가 없습니다.</p>";
+					return;
+				}
+
+				resultEl.innerHTML = rows
+					.map((row) => {
+						const detailEntries = Object.keys(LABELS)
+							.filter((key) => !SUMMARY_KEYS.has(key))
+							.map((key) => `<div><dt>${LABELS[key]}</dt><dd>${formatValue(key, row[key])}</dd></div>`)
+							.join("");
+
+						return `
+							<details class="card">
+								<summary>
+									<span class="name">${row.HOUSE_NM ?? "-"}</span>
+									<span class="region">${row.SUBSCRPT_AREA_CODE_NM ?? "-"}</span>
+									<span class="meta">모집공고 ${row.RCRIT_PBLANC_DE ?? "-"} · 접수 ${row.RCEPT_BGNDE ?? "-"} ~ ${row.RCEPT_ENDDE ?? "-"}</span>
+								</summary>
+								<dl class="card-detail">${detailEntries}</dl>
+							</details>
+						`;
+					})
+					.join("");
+			}
+
+			function renderPage(page) {
+				currentPage = page;
+				const totalPages = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
+				const start = (page - 1) * PAGE_SIZE;
+				const pageRows = allRows.slice(start, start + PAGE_SIZE);
+
+				renderCards(pageRows);
+
+				if (allRows.length === 0) {
+					paginationEl.innerHTML = "";
+					return;
+				}
+
+				paginationEl.innerHTML = `
+					<button type="button" id="prev-page" ${page <= 1 ? "disabled" : ""}>이전</button>
+					<span>${page} / ${totalPages} 페이지</span>
+					<button type="button" id="next-page" ${page >= totalPages ? "disabled" : ""}>다음</button>
+				`;
+
+				document.getElementById("prev-page")?.addEventListener("click", () => renderPage(currentPage - 1));
+				document.getElementById("next-page")?.addEventListener("click", () => renderPage(currentPage + 1));
+			}
+
+			form.addEventListener("submit", async (event) => {
+				event.preventDefault();
+				statusEl.textContent = "조회 중...";
+				statusEl.className = "";
+				resultEl.innerHTML = "";
+				paginationEl.innerHTML = "";
+
+				const formData = new FormData(form);
+
+				try {
+					const results = await Promise.all(
+						REGIONS.map(async (region) => {
+							const params = buildQuery(formData, region);
+							const res = await fetch(`/api/apt/detail?${params.toString()}`);
+							const body = await res.json();
+							if (!res.ok) throw new Error(body.error || `${region} 요청 실패 (${res.status})`);
+							return body;
+						}),
+					);
+
+					allRows = results.flatMap((body) => body.data ?? []);
+					allRows.sort((a, b) => (b.RCRIT_PBLANC_DE ?? "").localeCompare(a.RCRIT_PBLANC_DE ?? ""));
+					// totalCount는 조건과 무관한 전체 데이터셋 크기라 의미 없음 — 실제 조건 매칭 건수는 matchCount
+					const matchTotal = results.reduce((sum, body) => sum + (body.matchCount ?? 0), 0);
+
+					statusEl.textContent = `서울·경기 조건에 맞는 ${matchTotal}건 (페이지당 ${PAGE_SIZE}건, 카드를 눌러 상세보기)`;
+					renderPage(1);
+				} catch (err) {
+					statusEl.textContent = `오류: ${err.message}`;
+					statusEl.className = "error";
+				}
+			});
+		</script>
+	</body>
+</html>

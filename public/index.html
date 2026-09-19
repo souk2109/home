@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>청약 정보</title>
+		<link rel="stylesheet" href="/assets/site.css" />
+		<style>
+			.service-list {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 0.6rem;
+			}
+			.service-list li {
+				border: 1px solid var(--color-border);
+				border-radius: 8px;
+				overflow: hidden;
+			}
+			.service-list a,
+			.service-list .disabled {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 0.75rem;
+				padding: 0.9rem 1rem;
+				text-decoration: none;
+				color: var(--color-text);
+			}
+			.service-list a:active {
+				background: #f5f7ff;
+			}
+			.service-list .disabled {
+				color: var(--color-muted);
+			}
+			.service-list .name {
+				font-size: 0.95rem;
+			}
+			.service-list .badge {
+				font-size: 0.72rem;
+				border-radius: 999px;
+				padding: 0.15rem 0.6rem;
+				white-space: nowrap;
+			}
+			.service-list a .badge {
+				color: var(--color-primary);
+				background: #eef2ff;
+			}
+			.service-list .disabled .badge {
+				color: #999;
+				background: #f0f0f0;
+			}
+		</style>
+	</head>
+	<body>
+		<header class="site-header">
+			<div class="container header-inner">
+				<a href="/" class="brand">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M3 11l9-8 9 8" />
+						<path d="M5 10v10a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-5h2v5a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10" />
+					</svg>
+					청약 정보
+				</a>
+				<nav>
+					<a href="/">홈</a>
+					<a href="/apt-detail">APT 분양정보</a>
+					<a href="#" id="logout-link">로그아웃</a>
+				</nav>
+			</div>
+		</header>
+
+		<main class="container">
+			<h1 class="page-title" style="font-size: 1.25rem; margin: 0 0 0.5rem">서울·경기 청약 정보</h1>
+			<p class="page-note" style="font-size: 0.8rem; color: var(--color-muted); margin: 0 0 1.25rem">
+				청약홈 Open API 기반, 서울·경기 지역의 접수 진행 중인 공고만 모아봅니다.
+			</p>
+
+			<ul class="service-list">
+				<li>
+					<a href="/apt-detail">
+						<span class="name">APT 분양정보 조회</span>
+						<span class="badge">바로가기</span>
+					</a>
+				</li>
+				<li>
+					<span class="disabled">
+						<span class="name">오피스텔/도시형/민간임대/생활숙박시설 조회</span>
+						<span class="badge">준비중</span>
+					</span>
+				</li>
+				<li>
+					<span class="disabled">
+						<span class="name">APT 잔여세대 조회</span>
+						<span class="badge">준비중</span>
+					</span>
+				</li>
+				<li>
+					<span class="disabled">
+						<span class="name">공공지원 민간임대 조회</span>
+						<span class="badge">준비중</span>
+					</span>
+				</li>
+				<li>
+					<span class="disabled">
+						<span class="name">임의공급 조회</span>
+						<span class="badge">준비중</span>
+					</span>
+				</li>
+			</ul>
+		</main>
+
+		<footer class="site-footer">
+			<div class="container">
+				<p>데이터 출처: 국토교통부 청약홈 Open API (공공데이터포털) · 매일 갱신 · 서울·경기 지역만 표시</p>
+			</div>
+		</footer>
+
+		<script src="/assets/logout.js" defer></script>
+	</body>
+</html>
