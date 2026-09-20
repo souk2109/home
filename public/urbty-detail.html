@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>오피스텔/도시형/민간임대 조회</title>
+		<link rel="stylesheet" href="/assets/site.css" />
+		<link rel="stylesheet" href="/assets/search-page.css" />
+	</head>
+	<body>
+		<main class="container">
+			<h1 class="page-title">오피스텔/도시형/민간임대/생활숙박시설 조회</h1>
+			<p class="page-note">접수마감이 지난 공고는 제외됩니다.</p>
+
+			<form id="search-form" class="search-bar">
+				<input type="text" name="houseName" placeholder="주택명으로 검색" />
+				<button type="submit">조회</button>
+			</form>
+
+			<div id="status"></div>
+			<div id="result"></div>
+			<div id="pagination" class="pagination"></div>
+		</main>
+
+		<footer class="site-footer">
+			<div class="container">
+				<p>데이터 출처: 국토교통부 청약홈 Open API (공공데이터포털) · 매일 갱신</p>
+			</div>
+		</footer>
+
+		<script src="/assets/logout.js" defer></script>
+		<script>
+			// API 응답 필드 전체(25개) 한글 라벨
+			window.LISTING_CONFIG = {
+				apiPath: "/api/urbty/detail",
+				modelApiPath: "/api/urbty/model",
+				announceField: "RCRIT_PBLANC_DE",
+				acceptStartField: "SUBSCRPT_RCEPT_BGNDE",
+				acceptEndField: "SUBSCRPT_RCEPT_ENDDE",
+				// 카드 요약 영역에 노출하는 필드 (나머지는 펼침 시 표시)
+				summaryKeys: ["HOUSE_NM", "SUBSCRPT_AREA_CODE_NM", "RCRIT_PBLANC_DE", "SUBSCRPT_RCEPT_BGNDE", "SUBSCRPT_RCEPT_ENDDE"],
+				// 이 엔드포인트는 Y/N 플래그 필드가 없음
+				ynKeys: [],
+				// 금액 필드는 "만원" 단위 접미사를 붙여 표시
+				moneyKeys: ["SUPLY_AMOUNT", "SUBSCRPT_REQST_AMOUNT"],
+				unitSuffixes: { TOT_SUPLY_HSHLDCO: "세대" },
+				// 주택형별 상세(getUrbtyOfctlLttotPblancMdl) 필드 라벨
+				modelLabels: {
+					MODEL_NO: "모델번호",
+					GP: "군",
+					TP: "타입",
+					EXCLUSE_AR: "전용면적(㎡)",
+					SUPLY_HSHLDCO: "공급세대수",
+					SUPLY_AMOUNT: "분양최고금액",
+					SUBSCRPT_REQST_AMOUNT: "청약신청금",
+				},
+				labels: {
+					HOUSE_NM: "주택명",
+					HOUSE_SECD_NM: "주택구분",
+					HOUSE_DTL_SECD_NM: "주택상세구분",
+					SEARCH_HOUSE_SECD: "검색주택구분코드",
+					SUBSCRPT_AREA_CODE_NM: "공급지역",
+						HSSPLY_ADRES: "공급위치",
+					TOT_SUPLY_HSHLDCO: "공급세대수",
+					RCRIT_PBLANC_DE: "모집공고일",
+						SUBSCRPT_RCEPT_BGNDE: "청약접수시작일",
+					SUBSCRPT_RCEPT_ENDDE: "청약접수종료일",
+					PRZWNER_PRESNATN_DE: "당첨자발표일",
+					CNTRCT_CNCLS_BGNDE: "계약시작일",
+					CNTRCT_CNCLS_ENDDE: "계약종료일",
+					HMPG_ADRES: "홈페이지",
+					BSNS_MBY_NM: "시행사",
+					MDHS_TELNO: "문의처",
+					MVN_PREARNGE_YM: "입주예정월",
+					PBLANC_URL: "청약홈 상세페이지",
+				},
+			};
+		</script>
+		<script src="/assets/listing-search.js" defer></script>
+	</body>
+</html>

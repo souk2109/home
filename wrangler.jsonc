@@ -24,7 +24,10 @@
 			"database_name": "home-db",
 			"database_id": "76db673a-a073-4be4-8e17-b5faf25e4ceb"
 		}
-	]
+	],
+	"triggers": {
+		"crons": ["0 19 * * *"] // 매일 04:00 KST(UTC 19:00 전날)에 청약홈 APT 분양정보 배치 수집 (자정 갱신 시간대 회피)
+	}
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>개인설정 - 청약 정보</title>
+		<link rel="stylesheet" href="/assets/site.css" />
+		<style>
+			.settings-container {
+				max-width: 640px;
+				margin: 0 auto;
+			}
+
+			.page-title {
+				font-size: 1.35rem;
+				font-weight: 700;
+				margin: 0 0 0.35rem;
+			}
+
+			.page-subtitle {
+				font-size: 0.85rem;
+				color: var(--color-text-secondary);
+				margin: 0 0 1.75rem;
+			}
+
+			.card {
+				background: #fff;
+				border: 1px solid var(--color-border);
+				border-radius: 12px;
+				padding: 1.5rem;
+				margin-bottom: 1.25rem;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+			}
+
+			.card-header {
+				display: flex;
+				align-items: flex-start;
+				gap: 0.65rem;
+				margin-bottom: 1rem;
+			}
+
+			.card-header svg {
+				width: 20px;
+				height: 20px;
+				flex-shrink: 0;
+				color: var(--color-primary);
+				margin-top: 0.15rem;
+			}
+
+			.card-header h2 {
+				font-size: 1rem;
+				font-weight: 600;
+				margin: 0 0 0.25rem;
+			}
+
+			.card-header p {
+				font-size: 0.82rem;
+				color: var(--color-text-secondary);
+				margin: 0;
+				line-height: 1.5;
+			}
+
+			/* 포함할 지역: 토글 칩 */
+			.chip-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+				gap: 0.5rem;
+			}
+
+			.chip {
+				position: relative;
+			}
+
+			.chip input {
+				position: absolute;
+				opacity: 0;
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				cursor: pointer;
+			}
+
+			.chip span {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				padding: 0.5rem 0.4rem;
+				border: 1px solid var(--color-border);
+				border-radius: 8px;
+				font-size: 0.85rem;
+				color: var(--color-text);
+				background: #fff;
+				transition: all 0.15s ease;
+				text-align: center;
+			}
+
+			.chip:has(input:checked) span {
+				background: var(--color-primary);
+				border-color: var(--color-primary);
+				color: #fff;
+				font-weight: 600;
+			}
+
+			.chip:has(input:focus-visible) span {
+				outline: 2px solid var(--color-primary);
+				outline-offset: 2px;
+			}
+
+			.card-footer {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 1rem;
+				margin-top: 1.25rem;
+				padding-top: 1rem;
+				border-top: 1px solid var(--color-border);
+			}
+
+			.current-status {
+				font-size: 0.8rem;
+				color: var(--color-text-secondary);
+			}
+
+			.current-status strong {
+				color: var(--color-text);
+			}
+
+			.btn {
+				padding: 0.55rem 1.1rem;
+				background: var(--color-primary);
+				color: #fff;
+				border: none;
+				border-radius: 8px;
+				cursor: pointer;
+				font-size: 0.88rem;
+				font-weight: 600;
+				white-space: nowrap;
+				flex-shrink: 0;
+				transition: background-color 0.15s ease;
+			}
+
+			.btn:hover {
+				background: var(--color-primary-dark);
+			}
+
+			/* 제외할 지역 */
+			.area-input-row {
+				display: flex;
+				gap: 0.5rem;
+			}
+
+			.area-input-row input {
+				flex: 1;
+				min-width: 0;
+				padding: 0.55rem 0.75rem;
+				border: 1px solid var(--color-border);
+				border-radius: 8px;
+				font-size: 0.9rem;
+				font-family: inherit;
+			}
+
+			.area-input-row input:focus {
+				outline: none;
+				border-color: var(--color-primary);
+				box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.12);
+			}
+
+			.area-list {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.5rem;
+				margin-top: 1rem;
+			}
+
+			.area-tag {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.4rem;
+				padding: 0.4rem 0.5rem 0.4rem 0.8rem;
+				background: var(--color-bg-secondary);
+				border: 1px solid var(--color-border);
+				border-radius: 999px;
+				font-size: 0.85rem;
+				color: var(--color-text);
+			}
+
+			.area-tag button {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 18px;
+				height: 18px;
+				background: none;
+				border: none;
+				color: var(--color-text-secondary);
+				cursor: pointer;
+				font-size: 1rem;
+				line-height: 1;
+				border-radius: 50%;
+				transition: all 0.15s ease;
+			}
+
+			.area-tag button:hover {
+				background: var(--color-error);
+				color: #fff;
+			}
+
+			/* 토스트 */
+			.toast-message {
+				position: fixed;
+				top: 1.5rem;
+				left: 50%;
+				transform: translateX(-50%);
+				padding: 0.85rem 1.25rem;
+				border-radius: 8px;
+				font-size: 0.88rem;
+				font-weight: 500;
+				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+				animation: slideIn 0.25s ease-out;
+				z-index: 1000;
+				max-width: calc(100% - 2rem);
+				text-align: center;
+			}
+
+			@keyframes slideIn {
+				from {
+					transform: translateX(-50%) translateY(-12px);
+					opacity: 0;
+				}
+				to {
+					transform: translateX(-50%) translateY(0);
+					opacity: 1;
+				}
+			}
+
+			@keyframes slideOut {
+				to {
+					transform: translateX(-50%) translateY(-12px);
+					opacity: 0;
+				}
+			}
+
+			.toast-message.success {
+				background: #f0fdf4;
+				color: #15803d;
+				border: 1px solid #bbf7d0;
+			}
+
+			.toast-message.error {
+				background: #fef2f2;
+				color: var(--color-error);
+				border: 1px solid #fecaca;
+			}
+
+			.toast-message.hide {
+				animation: slideOut 0.25s ease-out forwards;
+			}
+
+			@media (max-width: 420px) {
+				.card {
+					padding: 1.1rem;
+				}
+				.chip-grid {
+					grid-template-columns: repeat(4, 1fr);
+				}
+				.card-footer {
+					flex-direction: column;
+					align-items: stretch;
+				}
+				.btn {
+					width: 100%;
+				}
+				.area-input-row .btn {
+					width: auto; /* 입력란 옆 "추가" 버튼은 저장 버튼과 달리 폭을 100%로 늘리지 않는다 */
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main class="container">
+			<div class="settings-container">
+				<h1 class="page-title">개인설정</h1>
+				<p class="page-subtitle">APT 분양정보 조회 시 적용되는 지역 필터를 관리합니다.</p>
+
+				<details class="info-box">
+					<summary>❓ 설정방법이 궁금하다면</summary>
+					<div class="info-body">
+						<p><strong>포함할 시/도</strong>: 특정 시/도만 보고 싶을 때 체크하세요. 아무것도 체크하지 않으면 전국을 조회합니다.</p>
+						<p><strong>포함할 지역</strong>: "판교"처럼 구체적인 지역명을 입력하면, 주소에 그 키워드가 포함된 공고만 표시됩니다. 여러 개 등록하면 그중 하나라도 해당되면 표시됩니다. 아무것도 등록하지 않으면 전체가 표시됩니다.</p>
+						<p><strong>제외할 지역</strong>: 입력한 키워드가 주소에 포함된 공고는 조회 결과에서 숨겨집니다.</p>
+						<p>세 설정은 함께 적용됩니다: 포함할 시/도로 먼저 좁히고 → 포함할 지역에 해당하는 것만 남긴 뒤 → 제외할 지역에 걸리는 것을 뺍니다.</p>
+					</div>
+				</details>
+
+				<div class="card">
+					<div class="card-header">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="12" cy="10" r="3" />
+							<path d="M12 21c-4-4.5-7-8.2-7-11.5A7 7 0 0 1 19 9.5C19 12.8 16 16.5 12 21Z" />
+						</svg>
+						<div>
+							<h2>포함할 시/도</h2>
+							<p>선택하지 않으면 전국을 조회합니다. 선택하면 해당 시/도만 조회됩니다.</p>
+						</div>
+					</div>
+
+					<div class="chip-grid" id="chip-grid">
+						<label class="chip"><input type="checkbox" value="100" class="city-checkbox" /><span>서울</span></label>
+						<label class="chip"><input type="checkbox" value="200" class="city-checkbox" /><span>강원</span></label>
+						<label class="chip"><input type="checkbox" value="300" class="city-checkbox" /><span>대전</span></label>
+						<label class="chip"><input type="checkbox" value="312" class="city-checkbox" /><span>충남</span></label>
+						<label class="chip"><input type="checkbox" value="338" class="city-checkbox" /><span>세종</span></label>
+						<label class="chip"><input type="checkbox" value="360" class="city-checkbox" /><span>충북</span></label>
+						<label class="chip"><input type="checkbox" value="400" class="city-checkbox" /><span>인천</span></label>
+						<label class="chip"><input type="checkbox" value="410" class="city-checkbox" /><span>경기</span></label>
+						<label class="chip"><input type="checkbox" value="500" class="city-checkbox" /><span>광주</span></label>
+						<label class="chip"><input type="checkbox" value="513" class="city-checkbox" /><span>전남</span></label>
+						<label class="chip"><input type="checkbox" value="560" class="city-checkbox" /><span>전북</span></label>
+						<label class="chip"><input type="checkbox" value="600" class="city-checkbox" /><span>부산</span></label>
+						<label class="chip"><input type="checkbox" value="621" class="city-checkbox" /><span>경남</span></label>
+						<label class="chip"><input type="checkbox" value="680" class="city-checkbox" /><span>울산</span></label>
+						<label class="chip"><input type="checkbox" value="690" class="city-checkbox" /><span>제주</span></label>
+						<label class="chip"><input type="checkbox" value="700" class="city-checkbox" /><span>대구</span></label>
+						<label class="chip"><input type="checkbox" value="712" class="city-checkbox" /><span>경북</span></label>
+					</div>
+
+					<div class="card-footer">
+						<span class="current-status" id="cities-status">현재: 전국</span>
+						<button type="button" class="btn" id="save-cities-btn">저장</button>
+					</div>
+				</div>
+
+				<div class="card">
+					<div class="card-header">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="12" cy="12" r="9" />
+							<line x1="12" y1="8" x2="12" y2="16" />
+							<line x1="8" y1="12" x2="16" y2="12" />
+						</svg>
+						<div>
+							<h2>포함할 지역</h2>
+							<p>주소에 아래 키워드 중 하나라도 포함된 공고만 조회 결과에 표시됩니다. 입력하지 않으면 전체가 표시됩니다.</p>
+						</div>
+					</div>
+
+					<div class="area-input-row">
+						<input type="text" id="include-area-input" placeholder="예: 판교" />
+						<button type="button" class="btn" id="add-include-area-btn">추가</button>
+					</div>
+
+					<div id="include-area-list" class="area-list"></div>
+				</div>
+
+				<div class="card">
+					<div class="card-header">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="11" cy="11" r="7" />
+							<line x1="14.5" y1="14.5" x2="20" y2="20" />
+							<line x1="8.5" y1="11" x2="13.5" y2="11" />
+						</svg>
+						<div>
+							<h2>제외할 지역</h2>
+							<p>주소에 아래 키워드가 포함된 공고는 조회 결과에서 자동으로 제외됩니다.</p>
+						</div>
+					</div>
+
+					<div class="area-input-row">
+						<input type="text" id="exclude-area-input" placeholder="예: 평택" />
+						<button type="button" class="btn" id="add-exclude-area-btn">추가</button>
+					</div>
+
+					<div id="exclude-area-list" class="area-list"></div>
+				</div>
+			</div>
+		</main>
+
+		<footer class="site-footer">
+			<div class="container">
+				<p>데이터 출처: 국토교통부 청약홈 Open API (공공데이터포털) · 매일 갱신</p>
+			</div>
+		</footer>
+
+		<script src="/assets/logout.js" defer></script>
+		<script>
+			const saveCitiesBtn = document.getElementById("save-cities-btn");
+			const citiesStatusEl = document.getElementById("cities-status");
+			const cityCheckboxes = document.querySelectorAll(".city-checkbox");
+
+			const codeToName = {
+				"100": "서울", "200": "강원", "300": "대전", "312": "충남",
+				"338": "세종", "360": "충북", "400": "인천", "410": "경기",
+				"500": "광주", "513": "전남", "560": "전북", "600": "부산",
+				"621": "경남", "680": "울산", "690": "제주", "700": "대구",
+				"712": "경북",
+			};
+
+			let areas = [];
+
+			function showMessage(message, type) {
+				const toast = document.createElement("div");
+				toast.className = `toast-message ${type}`;
+				toast.textContent = message;
+				document.body.appendChild(toast);
+
+				setTimeout(() => {
+					toast.classList.add("hide");
+					setTimeout(() => toast.remove(), 250);
+				}, 3000);
+			}
+
+			function updateCitiesStatus(codes) {
+				citiesStatusEl.innerHTML = codes && codes.length > 0
+					? `현재: <strong>${codes.map((code) => codeToName[code]).join(", ")}</strong>`
+					: "현재: <strong>전국</strong>";
+			}
+
+			async function loadCities() {
+				try {
+					const res = await fetch("/api/settings/cities");
+					if (!res.ok) throw new Error("도시 설정 조회 실패");
+					const data = await res.json();
+					const cities = data.cities;
+
+					cityCheckboxes.forEach((checkbox) => {
+						checkbox.checked = !!cities && cities.includes(checkbox.value);
+					});
+					updateCitiesStatus(cities);
+				} catch (err) {
+					console.error(err);
+				}
+			}
+
+			saveCitiesBtn.addEventListener("click", async () => {
+				const selectedCodes = Array.from(cityCheckboxes)
+					.filter((checkbox) => checkbox.checked)
+					.map((checkbox) => checkbox.value);
+
+				try {
+					const res = await fetch("/api/settings/cities", {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify({ cities: selectedCodes.length > 0 ? selectedCodes : null }),
+					});
+					if (!res.ok) {
+						const errorData = await res.json();
+						throw new Error(errorData.error || "저장 실패");
+					}
+					updateCitiesStatus(selectedCodes);
+					const message = selectedCodes.length > 0
+						? `${selectedCodes.map((code) => codeToName[code]).join(", ")}로 설정되었습니다.`
+						: "전국 조회로 설정되었습니다.";
+					showMessage(message, "success");
+				} catch (err) {
+					showMessage(`오류: ${err.message}`, "error");
+				}
+			});
+
+			// 포함할 지역/제외할 지역 둘 다 구조가 동일해서(입력+추가 버튼+태그 목록) 공통 함수로 처리한다.
+			function setupAreaList({ apiPath, inputEl, addBtnEl, listEl, addedMessage, deletedMessage }) {
+				let areas = [];
+
+				function render() {
+					listEl.innerHTML = areas
+						.map(
+							(area) => `
+						<div class="area-tag">
+							<span>${area.area_name}</span>
+							<button type="button" class="delete-btn" data-id="${area.id}" aria-label="삭제">×</button>
+						</div>
+					`,
+						)
+						.join("");
+
+					listEl.querySelectorAll(".delete-btn").forEach((btn) => {
+						btn.addEventListener("click", async () => {
+							const id = btn.dataset.id;
+							try {
+								const res = await fetch(apiPath, {
+									method: "DELETE",
+									headers: { "content-type": "application/json" },
+									body: JSON.stringify({ id: parseInt(id) }),
+								});
+								if (!res.ok) {
+									const errorData = await res.json();
+									throw new Error(errorData.error || "삭제 실패");
+								}
+								areas = areas.filter((a) => a.id !== parseInt(id));
+								render();
+								showMessage(deletedMessage, "success");
+							} catch (err) {
+								showMessage(`오류: ${err.message}`, "error");
+							}
+						});
+					});
+				}
+
+				async function load() {
+					try {
+						const res = await fetch(apiPath);
+						if (!res.ok) throw new Error("조회 실패");
+						const data = await res.json();
+						areas = data.areas ?? [];
+						render();
+					} catch (err) {
+						showMessage(`오류: ${err.message}`, "error");
+					}
+				}
+
+				addBtnEl.addEventListener("click", async () => {
+					const areaName = inputEl.value.trim();
+					if (!areaName) {
+						showMessage("지역명을 입력하세요.", "error");
+						return;
+					}
+
+					try {
+						const res = await fetch(apiPath, {
+							method: "POST",
+							headers: { "content-type": "application/json" },
+							body: JSON.stringify({ areaName }),
+						});
+						if (!res.ok) {
+							const errorData = await res.json();
+							throw new Error(errorData.error || "추가 실패");
+						}
+						inputEl.value = "";
+						await load();
+						showMessage(addedMessage, "success");
+					} catch (err) {
+						showMessage(`오류: ${err.message}`, "error");
+					}
+				});
+
+				inputEl.addEventListener("keypress", (e) => {
+					if (e.key === "Enter") addBtnEl.click();
+				});
+
+				load();
+			}
+
+			setupAreaList({
+				apiPath: "/api/settings/included-areas",
+				inputEl: document.getElementById("include-area-input"),
+				addBtnEl: document.getElementById("add-include-area-btn"),
+				listEl: document.getElementById("include-area-list"),
+				addedMessage: "지역이 포함 목록에 추가되었습니다.",
+				deletedMessage: "지역이 포함 목록에서 삭제되었습니다.",
+			});
+
+			setupAreaList({
+				apiPath: "/api/settings",
+				inputEl: document.getElementById("exclude-area-input"),
+				addBtnEl: document.getElementById("add-exclude-area-btn"),
+				listEl: document.getElementById("exclude-area-list"),
+				addedMessage: "지역이 제외 목록에 추가되었습니다.",
+				deletedMessage: "지역이 제외 목록에서 삭제되었습니다.",
+			});
+
+			loadCities();
+		</script>
+	</body>
+</html>

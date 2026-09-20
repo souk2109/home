@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>배치 현황 - 청약 정보</title>
+		<link rel="stylesheet" href="/assets/site.css" />
+		<style>
+			.status-container {
+				max-width: 800px;
+				margin: 0 auto;
+			}
+			.page-title {
+				font-size: 1.35rem;
+				font-weight: 700;
+				margin: 0 0 0.35rem;
+			}
+			.page-note {
+				font-size: 0.85rem;
+				color: var(--color-text-secondary);
+				margin: 0 0 1rem;
+			}
+			#status.error {
+				color: var(--color-error);
+			}
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				font-size: 0.85rem;
+				margin-top: 1rem;
+			}
+			th,
+			td {
+				text-align: left;
+				padding: 0.5rem 0.6rem;
+				border-bottom: 1px solid var(--color-border);
+				vertical-align: top;
+			}
+			th {
+				color: var(--color-text-secondary);
+				font-weight: 600;
+				font-size: 0.78rem;
+			}
+			.badge {
+				display: inline-block;
+				padding: 0.15rem 0.55rem;
+				border-radius: 999px;
+				font-size: 0.75rem;
+				font-weight: 600;
+			}
+			.badge.success {
+				background: #f0fdf4;
+				color: #15803d;
+			}
+			.badge.failure {
+				background: #fef2f2;
+				color: var(--color-error);
+			}
+			.error-msg {
+				color: var(--color-error);
+				font-size: 0.78rem;
+				word-break: break-all;
+			}
+		</style>
+	</head>
+	<body>
+		<main class="container">
+			<div class="status-container">
+				<h1 class="page-title">배치 현황</h1>
+				<p class="page-note">최근 30건의 일일 배치 수집 결과입니다 (매일 04:00 KST 실행).</p>
+
+				<div id="status"></div>
+				<table id="runs-table" style="display: none">
+					<thead>
+						<tr>
+							<th>시각</th>
+							<th>타입</th>
+							<th>상태</th>
+							<th>건수</th>
+							<th>에러</th>
+						</tr>
+					</thead>
+					<tbody id="runs-body"></tbody>
+				</table>
+			</div>
+		</main>
+
+		<script src="/assets/logout.js" defer></script>
+		<script>
+			const statusEl = document.getElementById("status");
+			const tableEl = document.getElementById("runs-table");
+			const bodyEl = document.getElementById("runs-body");
+
+			const TYPE_LABELS = {
+				apt: "APT 분양정보",
+				urbty: "오피스텔/도시형/민간임대",
+				remndr: "APT 잔여세대",
+				pblpvtrent: "공공지원 민간임대",
+				opt: "임의공급",
+			};
+
+			async function load() {
+				statusEl.textContent = "불러오는 중...";
+				try {
+					const res = await fetch("/api/admin/batch-status");
+					const body = await res.json();
+					if (!res.ok) throw new Error(body.error || `조회 실패 (${res.status})`);
+
+					const runs = body.runs ?? [];
+					if (runs.length === 0) {
+						statusEl.textContent = "아직 배치 실행 기록이 없습니다.";
+						return;
+					}
+
+					bodyEl.innerHTML = runs
+						.map((run) => {
+							const badgeClass = run.status === "success" ? "success" : "failure";
+							const badgeText = run.status === "success" ? "성공" : "실패";
+							return `
+								<tr>
+									<td>${run.ran_at}</td>
+									<td>${TYPE_LABELS[run.listing_type] ?? run.listing_type}</td>
+									<td><span class="badge ${badgeClass}">${badgeText}</span></td>
+									<td>${run.row_count ?? "-"}</td>
+									<td class="error-msg">${run.error_message ?? "-"}</td>
+								</tr>
+							`;
+						})
+						.join("");
+
+					statusEl.textContent = "";
+					tableEl.style.display = "table";
+				} catch (err) {
+					statusEl.textContent = `오류: ${err.message}`;
+					statusEl.className = "error";
+				}
+			}
+
+			load();
+		</script>
+	</body>
+</html>

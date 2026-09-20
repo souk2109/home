@@ -166,3 +166,6 @@ dist
 !.env.example
 .wrangler/
 .tmp-create-user-*.sql
+
+# IDE
+.idea/

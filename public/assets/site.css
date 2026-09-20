@@ -2,9 +2,14 @@
 	color-scheme: light;
 	--color-primary: #2563eb;
 	--color-primary-dark: #1d4ed8;
+	--color-primary-rgb: 37, 99, 235;
 	--color-text: #1a1a1a;
+	--color-text-secondary: #6b7280;
 	--color-muted: #666;
 	--color-border: #e0e0e0;
+	--color-bg-secondary: #f8f9fb;
+	--color-error: #dc2626;
+	--color-success: #16a34a;
 }
 * {
 	box-sizing: border-box;
@@ -88,6 +93,38 @@ main.container {
 	padding-top: 1rem;
 	padding-bottom: 2rem;
 	min-height: calc(100vh - 8rem);
+}
+
+/* 페이지 상단에 접히는 안내 박스 (조회 페이지, 개인설정 등에서 공용) */
+.info-box {
+	background: var(--color-bg-secondary);
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	margin-bottom: 1.25rem;
+	overflow: hidden;
+}
+.info-box summary {
+	list-style: none;
+	cursor: pointer;
+	padding: 0.65rem 0.9rem;
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--color-primary);
+}
+.info-box summary::-webkit-details-marker {
+	display: none;
+}
+.info-body {
+	padding: 0 0.9rem 0.9rem;
+	font-size: 0.8rem;
+	color: var(--color-text);
+	line-height: 1.6;
+}
+.info-body p {
+	margin: 0 0 0.5rem;
+}
+.info-body p:last-child {
+	margin-bottom: 0;
 }
 
 .site-footer {
