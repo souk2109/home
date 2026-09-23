@@ -388,12 +388,41 @@ async function upsertListings(env, config, rows) {
 	}
 }
 
-async function logBatchRun(env, listingType, status, rowCount, errorMessage) {
+// upsert 직전에, 이번에 받아온 rows 중 D1에 이미 존재하는 pkColumns 조합이 몇 개인지 조회해서
+// 신규/갱신 건수를 나눈다. (upsert는 INSERT ... ON CONFLICT DO UPDATE라 결과만으로는 신규/갱신을 구분할 수 없음)
+async function countNewVsUpdated(env, config, rows) {
+	if (rows.length === 0) return { newCount: 0, updatedCount: 0 };
+
+	const pk = config.pkColumns;
+	const CHUNK = 50; // upsertListings와 동일한 배치 크기
+	const existingKeys = new Set();
+
+	for (let i = 0; i < rows.length; i += CHUNK) {
+		const chunk = rows.slice(i, i + CHUNK);
+		const whereClause = chunk.map(() => `(${pk.map((c) => `${c} = ?`).join(" AND ")})`).join(" OR ");
+		const binds = chunk.flatMap((row) => pk.map((c) => row[c] ?? null));
+		const result = await env.DB.prepare(`SELECT ${pk.join(", ")} FROM ${config.tableName} WHERE ${whereClause}`)
+			.bind(...binds)
+			.all();
+		for (const record of result.results ?? []) {
+			existingKeys.add(pk.map((c) => String(record[c])).join("|"));
+		}
+	}
+
+	let newCount = 0;
+	for (const row of rows) {
+		const key = pk.map((c) => String(row[c] ?? "")).join("|");
+		if (!existingKeys.has(key)) newCount++;
+	}
+	return { newCount, updatedCount: rows.length - newCount };
+}
+
+async function logBatchRun(env, listingType, status, rowCount, newCount, updatedCount, errorMessage) {
 	try {
 		await env.DB.prepare(
-			"INSERT INTO batch_runs (listing_type, status, row_count, error_message) VALUES (?, ?, ?, ?)",
+			"INSERT INTO batch_runs (listing_type, status, row_count, new_count, updated_count, error_message) VALUES (?, ?, ?, ?, ?, ?)",
 		)
-			.bind(listingType, status, rowCount, errorMessage)
+			.bind(listingType, status, rowCount, newCount, updatedCount, errorMessage)
 			.run();
 	} catch (err) {
 		console.error("배치 로그 기록 실패:", err);
@@ -404,11 +433,12 @@ async function runListingsBatch(env, listingType, config) {
 	try {
 		if (!env.SERVICE_KEY) throw new Error("SERVICE_KEY is not configured");
 		const rows = await fetchListingsIncremental(env, config);
+		const { newCount, updatedCount } = await countNewVsUpdated(env, config, rows);
 		await upsertListings(env, config, rows);
-		await logBatchRun(env, listingType, "success", rows.length, null);
-		console.log(`${config.tableName} 배치 수집 완료: ${rows.length}건`);
+		await logBatchRun(env, listingType, "success", rows.length, newCount, updatedCount, null);
+		console.log(`${config.tableName} 배치 수집 완료: ${rows.length}건 (신규 ${newCount} / 갱신 ${updatedCount})`);
 	} catch (err) {
-		await logBatchRun(env, listingType, "failure", null, err.message);
+		await logBatchRun(env, listingType, "failure", null, null, null, err.message);
 		console.error(`${config.tableName} 배치 수집 실패:`, err);
 	}
 }
@@ -500,7 +530,8 @@ function buildSharedHeader(user) {
 					청약 정보
 				</a>
 				<nav>
-					<a href="/">홈</a>
+					<a href="/">청약정보</a>
+					<a href="/loan">대출</a>
 					<a href="/settings">개인설정</a>
 					${adminLink}
 					<a href="#" id="logout-link">로그아웃</a>
@@ -546,6 +577,317 @@ async function handleAdminBatchStatus(user, env) {
 	if (user.email !== ADMIN_EMAIL) return jsonError("권한이 없습니다", 403);
 	const runs = await env.DB.prepare("SELECT * FROM batch_runs ORDER BY id DESC LIMIT 30").all();
 	return new Response(JSON.stringify({ runs: runs.results ?? [] }), {
+		headers: { "content-type": "application/json" },
+	});
+}
+
+// Tmap 지오코딩(주소 -> 좌표) 1회 시도. 매칭 항목은 있어도 좌표가 빈 문자열인 경우(주소를 못 찾은
+// 경우) null을 반환하고, API 자체가 실패하면 에러를 던진다.
+async function geocodeOnce(address, env) {
+	const target = new URL("https://apis.openapi.sk.com/tmap/geo/fullAddrGeo");
+	target.searchParams.set("version", "1");
+	target.searchParams.set("fullAddr", address);
+	target.searchParams.set("addressFlag", "F00");
+	target.searchParams.set("coordType", "WGS84GEO");
+	target.searchParams.set("appKey", env.TMAP_APP_KEY);
+	const res = await fetch(target, {
+		headers: { appKey: env.TMAP_APP_KEY, Accept: "application/json" },
+	});
+	const body = await res.json();
+	if (!res.ok) throw new Error(`Tmap geocode failed (${res.status}): ${JSON.stringify(body)}`);
+	const coord = body.coordinateInfo?.coordinate?.[0];
+	// newLon/newLat(신주소 좌표)는 매칭이 지번 주소로만 된 경우 빈 문자열("")로 내려온다.
+	// ??는 null/undefined만 대체하고 빈 문자열은 "값 있음"으로 취급하므로 ||를 써야 한다.
+	const lng = coord?.newLon || coord?.lon;
+	const lat = coord?.newLat || coord?.lat;
+	if (!lng || !lat) return null;
+	return { lng, lat };
+}
+
+// 청약 공고 주소는 아직 준공 전이라 도로명 주소가 없어 "~번지 일원", "(OO지구 내 A-4블록)"처럼
+// 지번 뒤에 수식어가 붙는 경우가 많다(최근 공고 15건 중 13건이 이 형식). "일원"/괄호 설명은
+// 실제 지명이 아니라서 원본 그대로는 지오코딩이 실패하는 경우가 있어, 그럴 때 이 수식어들을
+// 제거한 주소로 한 번 더 시도한다.
+function stripAddressQualifiers(address) {
+	return address
+		.replace(/\([^)]*\)/g, "")
+		.replace(/일원\s*$/, "")
+		.trim();
+}
+
+async function geocodeAddress(address, env) {
+	const direct = await geocodeOnce(address, env);
+	if (direct) return direct;
+
+	const cleaned = stripAddressQualifiers(address);
+	if (cleaned && cleaned !== address) {
+		const retried = await geocodeOnce(cleaned, env);
+		if (retried) return retried;
+	}
+
+	throw new Error(`주소를 찾을 수 없습니다: ${address}`);
+}
+
+// 대중교통 목적지 설정(개인설정 페이지)의 고정 3슬롯. 개수는 고정이지만 각 슬롯의 별명은 사용자가 자유 지정한다.
+const TRANSIT_DEST_KEYS = ["dest1", "dest2", "dest3"];
+
+async function handleGetTransitDestinations(user, env) {
+	const rows = await env.DB.prepare("SELECT dest_key, label, address FROM transit_destinations WHERE user_id = ?")
+		.bind(user.id)
+		.all();
+	const byKey = Object.fromEntries((rows.results ?? []).map((r) => [r.dest_key, r]));
+	return new Response(
+		JSON.stringify({
+			destinations: TRANSIT_DEST_KEYS.map((destKey) => ({
+				destKey,
+				label: byKey[destKey]?.label ?? "",
+				address: byKey[destKey]?.address ?? "",
+			})),
+		}),
+		{ headers: { "content-type": "application/json" } },
+	);
+}
+
+async function handleSaveTransitDestination(user, request, env) {
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		return jsonError("잘못된 요청입니다", 400);
+	}
+
+	const destKey = body.destKey;
+	const label = body.label?.trim();
+	const address = body.address?.trim();
+	if (!TRANSIT_DEST_KEYS.includes(destKey)) return jsonError("잘못된 목적지입니다", 400);
+
+	// transit_routes는 (좌표) 기준 캐시라 사용자/슬롯과 무관 - 주소를 바꿔도 캐시를 따로 지울 필요가 없다.
+	// 새 좌표는 자연히 새 캐시 키가 되고, 옛 좌표의 캐시는 다른 목적지가 우연히 재사용할 수도 있다.
+	if (!label || !address) {
+		await env.DB.prepare("DELETE FROM transit_destinations WHERE user_id = ? AND dest_key = ?").bind(user.id, destKey).run();
+		return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+	}
+
+	if (!env.TMAP_APP_KEY) return jsonError("TMAP_APP_KEY is not configured", 500);
+
+	let coord;
+	try {
+		coord = await geocodeAddress(address, env);
+	} catch (err) {
+		return jsonError(`주소 변환 실패: ${err.message}`, 400);
+	}
+
+	try {
+		const result = await env.DB.prepare(
+			`INSERT INTO transit_destinations (user_id, dest_key, label, address, lng, lat, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+			 ON CONFLICT(user_id, dest_key) DO UPDATE SET label = excluded.label, address = excluded.address, lng = excluded.lng, lat = excluded.lat, updated_at = excluded.updated_at`,
+		)
+			.bind(user.id, destKey, label, address, coord.lng, coord.lat)
+			.run();
+		if (!result.success) return jsonError("목적지 저장 실패", 500);
+	} catch (err) {
+		return jsonError(`목적지 저장 실패: ${err.message}`, 500);
+	}
+
+	return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+}
+
+// 캐싱된 경로 계산 기준 시각을 "평일 오전 8시(출근 시간)"로 고정한다 - 실행 시점(주말/새벽 등)에
+// 따라 배차 간격이 달라져 결과가 들쭉날쭉해지는 걸 막기 위함. 현재 시각이 이미 그 주의 평일
+// 오전 8시를 지났으면 다음 평일로, 주말이면 다음 월요일로 넘어간다. Workers 런타임은 UTC로 동작하므로
+// UTC 기준 시각에 9시간을 더해 KST 벽시계 값을 UTC getter로 그대로 읽는 트릭을 쓴다.
+function nextWeekdayMorningDttm() {
+	const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+	const kst = new Date(Date.now() + KST_OFFSET_MS);
+	const target = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate(), 8, 0, 0));
+	if (kst.getUTCHours() >= 8) target.setUTCDate(target.getUTCDate() + 1);
+	while (target.getUTCDay() === 0 || target.getUTCDay() === 6) {
+		target.setUTCDate(target.getUTCDate() + 1);
+	}
+	const yyyy = target.getUTCFullYear();
+	const mm = String(target.getUTCMonth() + 1).padStart(2, "0");
+	const dd = String(target.getUTCDate()).padStart(2, "0");
+	return `${yyyy}${mm}${dd}0800`;
+}
+
+// leg에서 상세 경로 표시(formatTransitLeg)에 필요한 필드만 남긴다 - passShape(폴리라인 좌표열)나
+// passStopList(전체 정류장 목록) 같은 용량 큰 필드는 화면에 안 쓰므로 저장 전에 잘라낸다.
+function slimLeg(leg) {
+	return {
+		mode: leg.mode,
+		route: leg.route,
+		sectionTime: leg.sectionTime,
+		distance: leg.distance,
+		start: leg.start ? { name: leg.start.name } : undefined,
+		end: leg.end ? { name: leg.end.name } : undefined,
+	};
+}
+
+// Tmap 전체 경로 API(itineraries[] 원소 1개)에서 캐싱에 필요한 필드만 뽑아낸다.
+function mapItinerary(itinerary) {
+	return {
+		totalTime: itinerary.totalTime,
+		transferCount: itinerary.transferCount,
+		totalFare: itinerary.fare?.regular?.totalFare ?? itinerary.totalFare ?? null,
+		pathType: itinerary.pathType ?? null,
+		legs: (itinerary.legs ?? []).map(slimLeg),
+	};
+}
+
+// 후보 경로들(itineraries) 중에서 "지하철"/"최단시간"/"최소환승" 3가지를 뽑아낸다.
+// - fastest: totalTime이 가장 작은 것
+// - fewestTransfers: transferCount가 가장 작은 것(동률이면 totalTime으로 타이브레이크)
+// - subway: pathType === 1(지하철 전용)인 것 중 가장 빠른 것. 그런 경로가 아예 없으면 null.
+function categorizeItineraries(itineraries) {
+	if (!itineraries || itineraries.length === 0) return { fastest: null, fewestTransfers: null, subway: null };
+
+	const fastest = itineraries.reduce((a, b) => (b.totalTime < a.totalTime ? b : a));
+	const fewestTransfers = itineraries.reduce((a, b) => {
+		if (b.transferCount < a.transferCount) return b;
+		if (b.transferCount === a.transferCount && b.totalTime < a.totalTime) return b;
+		return a;
+	});
+	const subwayOnly = itineraries.filter((it) => it.pathType === 1);
+	const subway = subwayOnly.length > 0 ? subwayOnly.reduce((a, b) => (b.totalTime < a.totalTime ? b : a)) : null;
+
+	return { fastest, fewestTransfers, subway };
+}
+
+// 카테고리별 itinerary(있으면)를 클라이언트에 보낼 요약 형태로 변환한다(legs는 상세보기 때만 별도 조회).
+function buildRouteSummaries(categorized) {
+	const out = {};
+	for (const key of ["fastest", "fewestTransfers", "subway"]) {
+		const it = categorized[key];
+		out[key] = it ? { totalTimeMin: Math.round(it.totalTime / 60), transferCount: it.transferCount, fare: it.totalFare } : null;
+	}
+	return out;
+}
+
+// 청약 카드의 "길찾기" 버튼: 청약 주소 -> 개인설정에 등록된 목적지들까지의 대중교통 요약 정보.
+// listingType은 LISTING_TYPES의 키와 동일(apt/urbty/remndr/pblpvtrent/opt) - 다른 조회 페이지도
+// LISTING_CONFIG에 transitButton: true, listingTypeKey만 추가하면 이 엔드포인트를 그대로 재사용한다.
+async function handleTransitRoute(user, url, env) {
+	const listingType = url.searchParams.get("listingType");
+	const houseManageNo = url.searchParams.get("houseManageNo");
+	const pblancNo = url.searchParams.get("pblancNo");
+	const address = url.searchParams.get("address");
+	if (!LISTING_TYPES[listingType]) return jsonError("잘못된 listingType입니다", 400);
+	if (!houseManageNo || !pblancNo || !address) return jsonError("houseManageNo, pblancNo, address가 필요합니다", 400);
+
+	const destRows = await env.DB.prepare(
+		"SELECT dest_key, label, lng, lat FROM transit_destinations WHERE user_id = ? AND label != '' AND address != ''",
+	)
+		.bind(user.id)
+		.all();
+	const destinations = destRows.results ?? [];
+
+	if (destinations.length === 0) {
+		return new Response(JSON.stringify({ results: [] }), { headers: { "content-type": "application/json" } });
+	}
+
+	if (!env.TMAP_APP_KEY) return jsonError("TMAP_APP_KEY is not configured", 500);
+
+	const results = [];
+	const uncached = [];
+
+	for (const dest of destinations) {
+		const cached = await env.DB.prepare(
+			"SELECT itineraries_json FROM transit_routes WHERE listing_type = ? AND house_manage_no = ? AND pblanc_no = ? AND dest_lng = ? AND dest_lat = ?",
+		)
+			.bind(listingType, houseManageNo, pblancNo, dest.lng, dest.lat)
+			.first();
+		if (cached) {
+			const itineraries = JSON.parse(cached.itineraries_json);
+			results.push({ destKey: dest.dest_key, label: dest.label, routes: buildRouteSummaries(categorizeItineraries(itineraries)) });
+		} else {
+			uncached.push(dest);
+		}
+	}
+
+	if (uncached.length > 0) {
+		let listingCoord;
+		try {
+			listingCoord = await geocodeAddress(address, env);
+		} catch (err) {
+			for (const dest of uncached) {
+				results.push({ destKey: dest.dest_key, label: dest.label, error: `주소 변환 실패: ${err.message}` });
+			}
+			results.sort((a, b) => a.destKey.localeCompare(b.destKey));
+			return new Response(JSON.stringify({ results }), { headers: { "content-type": "application/json" } });
+		}
+
+		for (const dest of uncached) {
+			try {
+				// count: 5로 후보 경로를 여러 개 받아서(호출은 여전히 1건) "지하철/최단시간/최소환승"을
+				// 우리 쪽에서 직접 골라낸다. legs까지 통째로 저장해두므로 상세보기 때 API를 또 안 부른다.
+				const routeRes = await fetch("https://apis.openapi.sk.com/transit/routes", {
+					method: "POST",
+					headers: { appKey: env.TMAP_APP_KEY, "content-type": "application/json" },
+					body: JSON.stringify({
+						startX: listingCoord.lng,
+						startY: listingCoord.lat,
+						endX: dest.lng,
+						endY: dest.lat,
+						count: 5,
+						searchDttm: nextWeekdayMorningDttm(),
+					}),
+				});
+				const body = await routeRes.json();
+				const rawItineraries = body?.metaData?.plan?.itineraries ?? [];
+				if (rawItineraries.length === 0) throw new Error(body?.error?.message || "경로를 찾을 수 없습니다");
+				const itineraries = rawItineraries.map(mapItinerary);
+
+				await env.DB.prepare(
+					`INSERT INTO transit_routes (listing_type, house_manage_no, pblanc_no, dest_lng, dest_lat, itineraries_json, fetched_at)
+					 VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+					 ON CONFLICT(listing_type, house_manage_no, pblanc_no, dest_lng, dest_lat) DO UPDATE SET
+					   itineraries_json = excluded.itineraries_json, fetched_at = excluded.fetched_at`,
+				)
+					.bind(listingType, houseManageNo, pblancNo, dest.lng, dest.lat, JSON.stringify(itineraries))
+					.run();
+
+				results.push({ destKey: dest.dest_key, label: dest.label, routes: buildRouteSummaries(categorizeItineraries(itineraries)) });
+			} catch (err) {
+				results.push({ destKey: dest.dest_key, label: dest.label, error: err.message });
+			}
+		}
+	}
+
+	results.sort((a, b) => a.destKey.localeCompare(b.destKey));
+	return new Response(JSON.stringify({ results }), { headers: { "content-type": "application/json" } });
+}
+
+// "지하철"/"최단시간"/"최소환승" 중 하나를 펼쳤을 때 상세 경로(legs)를 보여주는 엔드포인트.
+// handleTransitRoute가 최초 조회 시 후보 경로 전체를 이미 저장해두므로, 여기서는 Tmap을 다시
+// 부르지 않고 D1에서 읽은 뒤 같은 categorizeItineraries()로 재계산만 해서 legs를 꺼낸다.
+async function handleTransitRouteDetail(user, url, env) {
+	const listingType = url.searchParams.get("listingType");
+	const houseManageNo = url.searchParams.get("houseManageNo");
+	const pblancNo = url.searchParams.get("pblancNo");
+	const destKey = url.searchParams.get("destKey");
+	const category = url.searchParams.get("category");
+	if (!LISTING_TYPES[listingType]) return jsonError("잘못된 listingType입니다", 400);
+	if (!houseManageNo || !pblancNo || !destKey || !category) {
+		return jsonError("houseManageNo, pblancNo, destKey, category가 필요합니다", 400);
+	}
+
+	const dest = await env.DB.prepare("SELECT lng, lat FROM transit_destinations WHERE user_id = ? AND dest_key = ?")
+		.bind(user.id, destKey)
+		.first();
+	if (!dest) return jsonError("목적지를 찾을 수 없습니다", 404);
+
+	const cached = await env.DB.prepare(
+		"SELECT itineraries_json FROM transit_routes WHERE listing_type = ? AND house_manage_no = ? AND pblanc_no = ? AND dest_lng = ? AND dest_lat = ?",
+	)
+		.bind(listingType, houseManageNo, pblancNo, dest.lng, dest.lat)
+		.first();
+	if (!cached) return jsonError("저장된 경로가 없습니다", 404);
+
+	const categorized = categorizeItineraries(JSON.parse(cached.itineraries_json));
+	const selected = categorized[category];
+	if (!selected) return jsonError("해당 경로를 찾을 수 없습니다", 404);
+
+	return new Response(JSON.stringify({ legs: selected.legs }), {
 		headers: { "content-type": "application/json" },
 	});
 }
@@ -627,6 +969,22 @@ export default {
 			if (request.method === "GET") return handleGetCities(user, env);
 			if (request.method === "POST") return handleSaveCities(user, request, env);
 			return jsonError("Method not allowed", 405);
+		}
+
+		if (pathname === "/api/settings/transit-destinations") {
+			if (request.method === "GET") return handleGetTransitDestinations(user, env);
+			if (request.method === "POST") return handleSaveTransitDestination(user, request, env);
+			return jsonError("Method not allowed", 405);
+		}
+
+		if (pathname === "/api/transit-route") {
+			if (request.method !== "GET") return jsonError("Method not allowed", 405);
+			return handleTransitRoute(user, url, env);
+		}
+
+		if (pathname === "/api/transit-route/detail") {
+			if (request.method !== "GET") return jsonError("Method not allowed", 405);
+			return handleTransitRouteDetail(user, url, env);
 		}
 
 		for (const config of Object.values(LISTING_TYPES)) {

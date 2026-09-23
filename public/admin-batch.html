@@ -23,11 +23,42 @@
 			#status.error {
 				color: var(--color-error);
 			}
+
+			/* 타입별 카드 */
+			.type-card {
+				background: #fff;
+				border: 1px solid var(--color-border);
+				border-radius: 12px;
+				padding: 1rem 1.1rem;
+				margin-bottom: 1rem;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+			}
+			.type-card-header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 0.75rem;
+				flex-wrap: wrap;
+				margin-bottom: 0.15rem;
+			}
+			.type-card-header h2 {
+				font-size: 0.95rem;
+				font-weight: 700;
+				margin: 0;
+			}
+			.type-last-run {
+				font-size: 0.78rem;
+				color: var(--color-text-secondary);
+			}
+			.type-last-run strong {
+				color: var(--color-text);
+			}
+
 			table {
 				width: 100%;
 				border-collapse: collapse;
 				font-size: 0.85rem;
-				margin-top: 1rem;
+				margin-top: 0.75rem;
 			}
 			th,
 			td {
@@ -40,6 +71,9 @@
 				color: var(--color-text-secondary);
 				font-weight: 600;
 				font-size: 0.78rem;
+			}
+			tr:last-child td {
+				border-bottom: none;
 			}
 			.badge {
 				display: inline-block;
@@ -67,29 +101,17 @@
 		<main class="container">
 			<div class="status-container">
 				<h1 class="page-title">배치 현황</h1>
-				<p class="page-note">최근 30건의 일일 배치 수집 결과입니다 (매일 04:00 KST 실행).</p>
+				<p class="page-note">최근 30건의 일일 배치 수집 결과를 타입별로 모아 보여줍니다 (매일 04:00 KST 실행, 시각은 한국시간 기준입니다).</p>
 
 				<div id="status"></div>
-				<table id="runs-table" style="display: none">
-					<thead>
-						<tr>
-							<th>시각</th>
-							<th>타입</th>
-							<th>상태</th>
-							<th>건수</th>
-							<th>에러</th>
-						</tr>
-					</thead>
-					<tbody id="runs-body"></tbody>
-				</table>
+				<div id="type-sections"></div>
 			</div>
 		</main>
 
 		<script src="/assets/logout.js" defer></script>
 		<script>
 			const statusEl = document.getElementById("status");
-			const tableEl = document.getElementById("runs-table");
-			const bodyEl = document.getElementById("runs-body");
+			const sectionsEl = document.getElementById("type-sections");
 
 			const TYPE_LABELS = {
 				apt: "APT 분양정보",
@@ -98,6 +120,72 @@
 				pblpvtrent: "공공지원 민간임대",
 				opt: "임의공급",
 			};
+
+			// D1에는 UTC로 저장돼 있다(SQLite datetime('now')). "Z"를 붙여 UTC로 파싱한 뒤
+			// 한국시간(Asia/Seoul)으로 변환해서 보여준다.
+			function formatKST(ranAt) {
+				const d = new Date(`${ranAt.replace(" ", "T")}Z`);
+				if (Number.isNaN(d.getTime())) return ranAt;
+				return d.toLocaleString("ko-KR", {
+					timeZone: "Asia/Seoul",
+					year: "numeric",
+					month: "2-digit",
+					day: "2-digit",
+					hour: "2-digit",
+					minute: "2-digit",
+					second: "2-digit",
+					hour12: false,
+				});
+			}
+
+			// new_count = D1에 없던 신규 건수, updated_count = 이미 있던 갱신 건수 (실패 시 둘 다 null).
+			function formatNewUpdated(run) {
+				return `신규 ${run.new_count ?? "-"} · 갱신 ${run.updated_count ?? "-"}`;
+			}
+
+			function renderRunRow(run) {
+				const badgeClass = run.status === "success" ? "success" : "failure";
+				const badgeText = run.status === "success" ? "성공" : "실패";
+				return `
+					<tr>
+						<td>${formatKST(run.ran_at)}</td>
+						<td><span class="badge ${badgeClass}">${badgeText}</span></td>
+						<td>${run.new_count ?? "-"}</td>
+						<td>${run.updated_count ?? "-"}</td>
+						<td class="error-msg">${run.error_message ?? "-"}</td>
+					</tr>
+				`;
+			}
+
+			function renderTypeSection(typeKey, runs) {
+				const last = runs[0];
+				const lastText = last
+					? `마지막 실행: <strong>${formatKST(last.ran_at)}</strong> · ${last.status === "success" ? "성공" : "실패"}${last.status === "success" ? ` · ${formatNewUpdated(last)}` : ""}`
+					: "실행 기록 없음";
+
+				return `
+					<section class="type-card">
+						<div class="type-card-header">
+							<h2>${TYPE_LABELS[typeKey] ?? typeKey}</h2>
+							<span class="type-last-run">${lastText}</span>
+						</div>
+						<table>
+							<thead>
+								<tr>
+									<th>시각 (KST)</th>
+									<th>상태</th>
+									<th>신규</th>
+									<th>갱신</th>
+									<th>에러</th>
+								</tr>
+							</thead>
+							<tbody>
+								${runs.map(renderRunRow).join("")}
+							</tbody>
+						</table>
+					</section>
+				`;
+			}
 
 			async function load() {
 				statusEl.textContent = "불러오는 중...";
@@ -112,24 +200,19 @@
 						return;
 					}
 
-					bodyEl.innerHTML = runs
-						.map((run) => {
-							const badgeClass = run.status === "success" ? "success" : "failure";
-							const badgeText = run.status === "success" ? "성공" : "실패";
-							return `
-								<tr>
-									<td>${run.ran_at}</td>
-									<td>${TYPE_LABELS[run.listing_type] ?? run.listing_type}</td>
-									<td><span class="badge ${badgeClass}">${badgeText}</span></td>
-									<td>${run.row_count ?? "-"}</td>
-									<td class="error-msg">${run.error_message ?? "-"}</td>
-								</tr>
-							`;
-						})
-						.join("");
+					// 타입별로 묶는다. 각 타입 내부 순서는 API가 이미 최신순(id DESC)으로 주므로 그대로 유지된다.
+					const byType = new Map();
+					for (const run of runs) {
+						if (!byType.has(run.listing_type)) byType.set(run.listing_type, []);
+						byType.get(run.listing_type).push(run);
+					}
+
+					// TYPE_LABELS에 정의된 순서대로 먼저 보여주고, 목록에 없는 타입이 있으면 뒤에 붙인다.
+					const orderedKeys = [...Object.keys(TYPE_LABELS).filter((key) => byType.has(key)), ...[...byType.keys()].filter((key) => !(key in TYPE_LABELS))];
+
+					sectionsEl.innerHTML = orderedKeys.map((key) => renderTypeSection(key, byType.get(key))).join("");
 
 					statusEl.textContent = "";
-					tableEl.style.display = "table";
 				} catch (err) {
 					statusEl.textContent = `오류: ${err.message}`;
 					statusEl.className = "error";

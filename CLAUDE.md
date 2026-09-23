@@ -51,7 +51,7 @@ wrangler d1 info home-db
 - 배치 실패(청약홈 자정 갱신 등으로 1페이지가 비는 경우) 시 해당 테이블의 기존 데이터를 지우지 않고 그냥 이번 배치를 건너뛴다 — upsert 방식이라 안전.
 - 각 테이블 컬럼명은 API 응답 필드명을 그대로 사용 — 새 필드를 추가하려면 `schema.sql`과 `LISTING_TYPES`의 해당 `columns` 배열을 함께 수정할 것. **문서의 필드 목록을 100% 신뢰하지 말 것** — 오피스텔 엔드포인트도 문서 예시엔 `SUBSCRPT_AREA_CODE_NM`이 빠져있었지만 실제 응답엔 존재함. 새 엔드포인트 추가 시 반드시 실제 API 응답을 한 번 찍어보고 필드명을 확정할 것.
 - **알려진 제약**: 지역코드가 없는 전국/광역권 공고는 배치에는 저장되지만 `<regionField> IN (...)` 조건 특성상 어떤 지역을 선택해도 조회 결과에는 나타나지 않는다 (기존 라이브 프록시 방식에서도 동일하게 안 보였으므로 회귀 아님).
-- **배치 결과 로깅 + 관리자 화면**: `runListingsBatch()`가 매 실행마다 성공/실패 여부를 `batch_runs` 테이블에 기록한다(`logBatchRun()` — 성공 시 `row_count`, 실패 시 `error_message`). `/admin-batch` 페이지(+ `/api/admin/batch-status`)에서 최근 30건을 확인할 수 있는데, **`ADMIN_EMAIL`(현재 `"souk2109"`) 계정으로 로그인했을 때만** 헤더 nav에 "배치 현황" 링크가 뜨고 페이지/API 접근이 허용된다 (그 외 계정은 `/admin-batch` 접근 시 홈으로 리다이렉트, API는 403). 관리자 계정을 바꾸려면 `src/index.js`의 `ADMIN_EMAIL` 상수만 수정하면 된다. SERVICE_KEY 만료 등으로 배치가 며칠째 계속 실패하면 이 화면에서 바로 확인 가능.
+- **배치 결과 로깅 + 관리자 화면**: `runListingsBatch()`가 매 실행마다 성공/실패 여부를 `batch_runs` 테이블에 기록한다(`logBatchRun()` — 성공 시 `row_count`(+`new_count`/`updated_count`), 실패 시 `error_message`). `row_count`는 그 배치에서 API로부터 받아온 전체 건수(= 최근 30일 내 공고 전체, 신규+갱신 합산)이고, `new_count`/`updated_count`는 그중 D1에 pkColumns 기준으로 이미 있었는지 여부로 나눈 값이다 — upsert(`INSERT ... ON CONFLICT DO UPDATE`) 직전에 `countNewVsUpdated()`가 해당 rows의 pkColumns 조합이 테이블에 이미 존재하는지 별도 SELECT로 조회해서 판정한다(upsert 결과 자체로는 신규/갱신을 구분할 수 없어서 사전 조회 방식을 씀). `/admin-batch` 페이지(+ `/api/admin/batch-status`)에서 최근 30건을 **타입별 카드로 나눠** 확인할 수 있는데, **`ADMIN_EMAIL`(현재 `"souk2109"`) 계정으로 로그인했을 때만** 헤더 nav에 "배치 현황" 링크가 뜨고 페이지/API 접근이 허용된다 (그 외 계정은 `/admin-batch` 접근 시 홈으로 리다이렉트, API는 403). 관리자 계정을 바꾸려면 `src/index.js`의 `ADMIN_EMAIL` 상수만 수정하면 된다. SERVICE_KEY 만료 등으로 배치가 며칠째 계속 실패하면 이 화면에서 바로 확인 가능. **시각은 D1에 UTC로 저장돼 있어(`datetime('now')`) 페이지에서 `Asia/Seoul`로 변환해 보여준다** (`admin-batch.html`의 `formatKST()`).
 
 **`*Mdl`(주택형별 상세, 5개) 엔드포인트는 D1 배치 없이 라이브 프록시(`proxyApi`)를 그대로 클라이언트에서 사용한다.** 상세(Detail) 5개(APT/오피스텔/잔여세대/공공지원민간임대/임의공급)는 D1 기반이지만, `*Mdl`은 지역/마감일 검색 필드 자체가 없고 `house_manage_no`+`pblanc_no`로만 단건 조회가 가능해 "검색 가능한 목록"이 아니라 "이미 아는 특정 공고의 부가정보"다. 그래서 배치 저장 없이 **카드를 펼치는 시점에 `/assets/listing-search.js`가 `config.modelApiPath`(예: `/api/apt/model`)로 라이브 프록시를 직접 호출**해 "주택형별 상세" 섹션을 지연 로딩한다 (`loadModelSection()`, 카드당 최초 1회만 fetch 후 캐시). 새 조회 페이지에 이 기능을 추가하려면 `window.LISTING_CONFIG`에 `modelApiPath`/`modelLabels`/`moneyKeys`만 정의하면 된다 (`apt-detail.html` 참고). `*Mdl`도 문서와 실응답 필드명이 다를 수 있으니 추가 시 실제 API로 검증할 것.
 
@@ -94,6 +94,40 @@ wrangler d1 info home-db
 - 새 페이지를 만들 때는 `public/apt-detail.html`처럼 `<script src="/assets/logout.js" defer>`를 포함시킨다
 
 **헤더(로고+nav)는 각 HTML 파일에 없다 — Worker가 서빙 직전에 끼워 넣는다.** `src/index.js`의 `SHARED_HEADER` 상수 + `injectSharedHeader()`가, 로그인된 사용자에게 정적 HTML을 서빙하는 마지막 폴백(`return injectSharedHeader(await env.ASSETS.fetch(request));`)에서 응답 body의 `<body>` 바로 뒤에 헤더를 문자열 치환으로 삽입한다. **헤더를 바꿀 땐 `SHARED_HEADER` 한 곳만 수정하면 전체 페이지에 반영된다** (예전엔 페이지마다 복사돼 있어서 7곳을 따로 고쳐야 했음). 로그인 페이지(`/login`)는 비로그인 분기에서 서빙되므로 이 로직을 타지 않고 헤더 없는 원래 모습 그대로 나간다. 새 페이지를 추가할 때 `<header>` 블록을 직접 넣지 말 것 — `<body>` 열자마자 바로 `<main>`으로 시작하면 된다.
+
+## 대출 정보 페이지 (`/loan`)
+
+청약 종류별로 받을 수 있는 대출(LTV·DSR·총액한도)을 정리하는 **정적 페이지**다. API·D1·서버 로직을 전혀 쓰지 않고 `public/loan.html` 하나로 끝난다(계산은 전부 클라이언트 JS).
+
+- 헤더 nav의 "대출" 링크는 `src/index.js`의 `buildSharedHeader()`에 들어 있다 — 헤더는 Worker가 서빙 직전에 주입하므로 이 한 곳만 고치면 전체 페이지에 반영된다.
+- 구성: ① LTV/DTI/DSR 용어 안내(`info-box`) ② 대출 한도 계산기 ③ 청약 종류별 대출 구조(조회 페이지 5종과 1:1 대응) ④ 규제 기준 요약표 ⑤ 체크리스트 ⑥ 공식 확인처 링크.
+- 계산기는 **LTV 한도 / DSR 한도 / 총액한도 중 최솟값**을 최대 대출 가능액으로 보여준다. DSR 한도는 원리금균등 역산(`principalFromAnnualPayment()`), 금리는 `대출금리 + 스트레스 가산금리`를 쓴다. 금액 입력·표시 단위는 모두 **만원**.
+- **규제 수치(LTV 40/70/80%, 총액한도 6억/4억/2억, DSR 40/50%, 스트레스 가산 1.5%p)는 부동산 대책에 따라 수시로 바뀌는 값이라 하드코딩이 아니라 "기본값"으로 취급한다** — LTV는 프리셋 select + 직접 입력, 나머지도 전부 사용자가 고칠 수 있는 입력값이다. 기준이 바뀌면 `loan.html`의 select 기본값과 "규제 기준 요약" 표만 수정하면 된다.
+
+## 대중교통 경로 조회 (구현 중)
+
+청약 공고 주소에서 내 회사/여자친구 회사/여자친구집까지 대중교통 경로(소요시간·환승·요금)를 보여주는 기능. **TMAP(SK Open API, `openapi.sk.com`) 하나로 geocoding + 대중교통 경로를 전부 처리한다** — 시크릿 이름: `TMAP_APP_KEY`.
+
+- **지오코딩**: `GET https://apis.openapi.sk.com/tmap/geo/fullAddrGeo` — `appKey`는 헤더가 아니라 **쿼리 파라미터**로 보내야 함(`version=1&fullAddr=<주소>&addressFlag=F00&coordType=WGS84GEO&appKey=...`). 응답은 `coordinateInfo.coordinate[0]`에 `lat`/`lon`(신주소는 `newLat`/`newLon`).
+- **대중교통 요약정보**(카드 목록에 쓰는 가벼운 버전): `POST https://apis.openapi.sk.com/transit/routes/sub` — `appKey`는 **헤더**로 보냄. body: `{startX, startY, endX, endY, count}`. 응답 필드: `totalTime`(초), `transferCount`, `totalFare`, `totalWalkTime`, `totalDistance`, `pathType`. 종량제 0.55원/건.
+- **대중교통 전체 경로**(구간별 legs/steps 필요할 때만): `POST https://apis.openapi.sk.com/transit/routes` — 나머지는 요약정보와 동일하되 응답이 `metaData.plan.itineraries[]` 배열이고 각 itinerary에 `fare.regular.totalFare`, `totalTime`(초), `transferCount`, `legs[]`(구간별 mode/route/station 등 상세)가 들어있음. 종량제 0.88원/건.
+- **무료 티어는 하루 10건**(TMAP 대중교통 상품 기준) — 매 페이지뷰마다 호출하면 안 되고 D1(`transit_routes`)에 (사용자, 청약, 목적지) 조합당 영구 캐싱한다. 초과분은 종량제(건당 1원 미만)로 자동 전환 가능.
+- **DB 스키마(schema.sql에 추가 완료, D1에도 적용됨)**:
+  - `transit_destinations`(user_id, dest_key['dest1'|'dest2'|'dest3'], label, address, lng, lat) — 개인설정(`/settings`)의 목적지 3슬롯. **개수는 3개 고정이고 별명(label)만 사용자가 자유롭게 지정**한다(처음엔 완전 자유 추가/삭제 목록으로 만들었다가 "3개로 고정해달라"는 요청으로 되돌림). 주소는 다음(Daum) 우편번호 서비스를 페이지 내 모달로 임베드해서 검색으로만 입력받는다(직접 타이핑 시 오타로 지오코딩 실패하는 문제를 막기 위함) — 저장 시 서버가 Tmap 지오코딩까지 처리해 좌표를 같이 저장(`handleSaveTransitDestination`).
+  - `transit_routes`(listing_type, house_manage_no, pblanc_no, dest_lng, dest_lat, total_time, transfer_count, total_fare, total_walk_time, total_distance, path_type, detail_json) — **`user_id`/`dest_key`가 아니라 목적지 좌표(dest_lng/dest_lat) 자체가 캐시 키**다. 실제 경로 계산 결과는 "이 청약 좌표 ↔ 이 목적지 좌표" 조합에만 의존하고 누가 조회했는지와는 무관하므로, 다른 사용자가 같은 목적지 좌표로 조회해도 캐시를 공유해서 TMAP 대중교통 API 무료 한도(일 10건)를 아낀다. 이 설계 덕분에 사용자가 목적지 주소를 바꿔도 캐시를 따로 지울 필요가 없다(새 좌표는 자연히 새 캐시 키가 됨). `detail_json`은 사용자가 경로를 펼칠 때만 전체 경로 API로 채우는 선택 필드.
+- **폐기된 대안**: Kakao Local API + ODsay(무료 일 30건이지만 Server 플랫폼이 고정 IP를 요구해서 Cloudflare Workers의 유동 IP와 구조적으로 안 맞아 포기), 카카오모빌리티 길찾기 API(자동차 경로만 지원, 대중교통 없음).
+- Windows PowerShell에서 `wrangler secret put`이 실행 정책 때문에 막히면(`.ps1` 스크립트 차단) `node_modules\.bin\wrangler.cmd`를 직접 호출하거나 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`로 우회.
+- **`GET /api/transit-route?listingType=&houseManageNo=&pblancNo=&address=`** — 카드의 "길찾기" 버튼이 호출하는 정식 엔드포인트(`handleTransitRoute`). listingType은 `LISTING_TYPES`의 키와 동일. 사용자의 `transit_destinations` 3슬롯 중 채워진 것만 대상으로, 각각 `transit_routes` 캐시를 먼저 조회하고 없는 것만 청약 주소를 지오코딩(1회, 목적지들이 공유)한 뒤 "대중교통 요약정보" API로 채워서 캐싱한다. 목적지 하나가 실패해도 나머지는 정상 응답(부분 실패 허용).
+- **클라이언트 확장 방법**: `LISTING_CONFIG`에 `transitButton: true`와 `listingTypeKey`(LISTING_TYPES 키)만 추가하면 그 조회 페이지에도 "길찾기" 버튼이 생긴다(`public/assets/listing-search.js`). 5개 조회 페이지(apt/urbty/remndr/pblpvtrent/opt) 전부 적용 완료.
+- 버튼은 카드를 펼칠 때 자동 로드되지 않고 **명시적으로 눌렀을 때만** 호출된다(무료 한도 하루 10건을 카드 펼침만으로 소모하지 않기 위함) — `*Mdl` 주택형별 상세(카드 펼침 시 자동 로드)와는 다른 패턴이니 헷갈리지 말 것.
+- 개발 중 썼던 `/api/test-transit`, `/api/test-transit-summary`, `/api/test-geocode`(admin 전용 디버그용) 임시 엔드포인트는 실제 기능 검증 후 제거 완료.
+- **버그 픽스 이력: `geocodeOnce()`가 `newLon ?? lon` 대신 `newLon || lon`을 써야 한다.** Tmap `fullAddrGeo`는 지번 주소로만 매칭된 경우 신주소 좌표(`newLat`/`newLon`)를 빈 문자열("")로 내려주는데, `??`(nullish 병합)는 빈 문자열을 "값 있음"으로 취급해서 실제 좌표(`lat`/`lon`)로 대체(fallback)가 안 되는 버그가 있었다(청약 공고 주소는 대부분 "~번지 일원" 식 지번 주소라 이 버그에 항상 걸렸음 - `||`로 수정해서 해결됨).
+- **참고**: 청약 공고 주소는 대부분(최근 15건 중 13건) 도로명 없이 "부산광역시 수영구 망미동 253-1번지 일원"처럼 "~번지 일원" 형식이다. `geocodeAddress()`는 원본이 실패하면 `stripAddressQualifiers()`로 "일원"/괄호 설명을 제거한 주소로 한 번 더 시도하는 보조 안전장치도 갖고 있다(위 `||` 버그 수정 이후에는 대부분 원본 그대로도 성공할 것으로 보임).
+- **경로 계산 기준 시각은 "평일 오전 8시(출근 시간)"로 고정한다** (`nextWeekdayMorningDttm()`, Tmap 호출 시 `searchDttm`으로 전달). 호출 시점(주말/새벽 등)에 따라 배차 간격이 달라져 캐싱된 결과가 들쭉날쭉해지는 걸 막기 위함 — 실행 시각이 이미 그날 8시를 지났으면 다음 평일로, 주말이면 다음 월요일로 자동 이동한다.
+- **요약이 아니라 전체 경로 API(`/transit/routes`)를 `count: 5`로 최초 조회 때부터 쓴다.** 무료 한도 안에서는 호출 1건 소모가 요약(`/routes/sub`)이나 전체나, `count`가 몇이든 똑같으므로(파라미터일 뿐 호출 횟수엔 영향 없음), 처음부터 후보 경로 여러 개를 받아 `transit_routes.itineraries_json`에 배열째로 저장해둔다.
+- **카드에는 목적지별로 "지하철/최단시간/최소환승" 3가지를 보여준다** (`categorizeItineraries()` — fastest=totalTime 최소, fewestTransfers=transferCount 최소(동률이면 totalTime), subway=pathType===1 중 최소시간, 없으면 null). 이 분류는 저장된 `itineraries_json`에서 매번 즉석 계산하므로 캐시는 원본 후보 배열 하나만 들고 있으면 된다. `GET /api/transit-route/detail?...&category=fastest|fewestTransfers|subway`를 누르면 Tmap을 다시 안 부르고 같은 분류 로직을 D1에서 재실행해서 `legs`만 꺼내 보여준다(`handleTransitRouteDetail`).
+- `slimLeg()`가 저장 전에 `passShape`(폴리라인 좌표열)·`passStopList`(전체 정류장 목록) 같은 화면에 안 쓰는 용량 큰 필드를 잘라내서 `itineraries_json` 크기를 줄인다.
+- 위 변경들(고정 출발시각 도입, 전체 API 전환, 카테고리 3종 분리) 때마다 그 전 스키마로 캐싱된 `transit_routes` 기존 행은 지워서 재계산을 유도했다(테스트 단계라 몇 건 안 됨).
 
 ## 배포 완료
 

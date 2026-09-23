@@ -36,6 +36,8 @@
 			window.LISTING_CONFIG = {
 				apiPath: "/api/apt/detail",
 				modelApiPath: "/api/apt/model",
+				listingTypeKey: "apt",
+				transitButton: true,
 				announceField: "RCRIT_PBLANC_DE",
 				acceptStartField: "RCEPT_BGNDE",
 				acceptEndField: "RCEPT_ENDDE",
@@ -46,8 +48,9 @@
 				unitSuffixes: { TOT_SUPLY_HSHLDCO: "세대" },
 				// 주택형별 상세(getAPTLttotPblancMdl) 필드 라벨
 				modelLabels: {
-					MODEL_NO: "모델번호",
 					HOUSE_TY: "주택형",
+					// API 응답엔 전용면적 필드가 없어 HOUSE_TY(예: "058.8500A")에서 계산해 표시 (listing-search.js 참고)
+					__EXCLUSE_AR_FROM_HOUSE_TY__: "전용면적",
 					SUPLY_AR: "공급면적(㎡)",
 					SUPLY_HSHLDCO: "일반공급세대수",
 					SPSPLY_HSHLDCO: "특별공급세대수",
@@ -73,7 +76,9 @@
 					"NPLN_PRVOPR_PUBLIC_HOUSE_AT",
 					"PUBLIC_HOUSE_SPCLW_APPLC_AT",
 				],
-				// 투기과열지구/조정대상지역이 "아니오"(규제 없음)일 때만 강조 표시
+				// 투기과열지구/조정대상지역이 "예"(규제지역)일 때 빨간색 형광펜으로 강조 표시
+				highlightYesKeys: ["SPECLT_RDN_EARTH_AT", "MDAT_TRGET_AREA_SECD"],
+				// "아니오"(비규제지역)일 때 노란색 형광펜으로 강조 표시
 				highlightNoKeys: ["SPECLT_RDN_EARTH_AT", "MDAT_TRGET_AREA_SECD"],
 				// 라벨에 마우스를 올리면(title) 보이는 짧은 설명
 				labelHints: {
@@ -100,11 +105,12 @@
 				`,
 				labels: {
 					HOUSE_NM: "주택명",
+					HSSPLY_ADRES: "공급위치",
+					MVN_PREARNGE_YM: "입주예정월",
 					HOUSE_SECD_NM: "주택구분",
 					HOUSE_DTL_SECD_NM: "주택상세구분",
 					RENT_SECD_NM: "분양구분",
 					SUBSCRPT_AREA_CODE_NM: "공급지역",
-						HSSPLY_ADRES: "공급위치",
 					TOT_SUPLY_HSHLDCO: "공급세대수",
 					RCRIT_PBLANC_DE: "모집공고일",
 						RCEPT_BGNDE: "청약접수시작일",
@@ -126,20 +132,19 @@
 					PRZWNER_PRESNATN_DE: "당첨자발표일",
 					CNTRCT_CNCLS_BGNDE: "계약시작일",
 					CNTRCT_CNCLS_ENDDE: "계약종료일",
-					HMPG_ADRES: "홈페이지",
-					CNSTRCT_ENTRPS_NM: "시공사",
-					MDHS_TELNO: "문의처",
-					BSNS_MBY_NM: "시행사",
-					MVN_PREARNGE_YM: "입주예정월",
+					PBLANC_URL: "청약 홈페이지",
+					HMPG_ADRES: "주택 홈페이지",
 					SPECLT_RDN_EARTH_AT: "투기과열지구",
 					MDAT_TRGET_AREA_SECD: "조정대상지역",
+					BSNS_MBY_NM: "시행사",
 					PARCPRC_ULS_AT: "분양가상한제",
-					IMPRMN_BSNS_AT: "정비사업",
-					PUBLIC_HOUSE_EARTH_AT: "공공주택지구",
-					LRSCL_BLDLND_AT: "대규모 택지개발지구",
-					NPLN_PRVOPR_PUBLIC_HOUSE_AT: "수도권 내 민영 공공주택지구",
+					// IMPRMN_BSNS_AT: "정비사업",
+					// PUBLIC_HOUSE_EARTH_AT: "공공주택지구",
+					// LRSCL_BLDLND_AT: "대규모 택지개발지구",
+					// NPLN_PRVOPR_PUBLIC_HOUSE_AT: "수도권 내 민영 공공주택지구",
 					PUBLIC_HOUSE_SPCLW_APPLC_AT: "공공주택 특별법 적용여부",
-					PBLANC_URL: "청약홈 상세페이지",
+					CNSTRCT_ENTRPS_NM: "시공사",
+					MDHS_TELNO: "문의처"
 				},
 			};
 		</script>

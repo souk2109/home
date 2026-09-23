@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>대출 - 청약 정보</title>
+		<link rel="stylesheet" href="/assets/site.css" />
+		<style>
+			.page-title {
+				font-size: 1.35rem;
+				font-weight: 700;
+				margin: 0 0 0.35rem;
+			}
+			.page-subtitle {
+				font-size: 0.85rem;
+				color: var(--color-text-secondary);
+				margin: 0 0 1.25rem;
+			}
+
+			.card {
+				background: #fff;
+				border: 1px solid var(--color-border);
+				border-radius: 12px;
+				padding: 1.25rem;
+				margin-bottom: 1.25rem;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+			}
+			.card h2 {
+				font-size: 1rem;
+				font-weight: 600;
+				margin: 0 0 0.35rem;
+			}
+			.card .card-desc {
+				font-size: 0.8rem;
+				color: var(--color-text-secondary);
+				margin: 0 0 1rem;
+				line-height: 1.5;
+			}
+
+			/* 입력 폼 */
+			.field-grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 0.75rem;
+			}
+			.field {
+				display: flex;
+				flex-direction: column;
+				gap: 0.3rem;
+				min-width: 0;
+			}
+			.field.full {
+				grid-column: 1 / -1;
+			}
+			.field label {
+				font-size: 0.78rem;
+				color: var(--color-text-secondary);
+				font-weight: 600;
+			}
+			.field input,
+			.field select {
+				width: 100%;
+				min-width: 0;
+				padding: 0.5rem 0.65rem;
+				border: 1px solid var(--color-border);
+				border-radius: 8px;
+				font-size: 0.9rem;
+				font-family: inherit;
+				background: #fff;
+				color: var(--color-text);
+			}
+			.field input:focus,
+			.field select:focus {
+				outline: none;
+				border-color: var(--color-primary);
+				box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.12);
+			}
+			.field .hint {
+				font-size: 0.72rem;
+				color: var(--color-muted);
+			}
+			.checkline {
+				display: flex;
+				align-items: center;
+				gap: 0.45rem;
+				font-size: 0.82rem;
+				color: var(--color-text);
+			}
+
+			/* 결과 */
+			.result {
+				margin-top: 1.1rem;
+				padding-top: 1rem;
+				border-top: 1px solid var(--color-border);
+			}
+			.result-main {
+				background: #eef2ff;
+				border: 1px solid #c7d2fe;
+				border-radius: 10px;
+				padding: 0.9rem 1rem;
+				margin-bottom: 0.9rem;
+			}
+			.result-main .label {
+				font-size: 0.78rem;
+				color: var(--color-primary-dark);
+				font-weight: 600;
+			}
+			.result-main .value {
+				font-size: 1.5rem;
+				font-weight: 700;
+				color: var(--color-primary-dark);
+				margin-top: 0.15rem;
+				line-height: 1.2;
+			}
+			.result-main .note {
+				font-size: 0.75rem;
+				color: var(--color-text-secondary);
+				margin-top: 0.35rem;
+				line-height: 1.5;
+			}
+			.limit-list {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 0.4rem;
+			}
+			.limit-list li {
+				display: flex;
+				align-items: baseline;
+				justify-content: space-between;
+				gap: 0.75rem;
+				font-size: 0.83rem;
+				padding: 0.55rem 0.7rem;
+				border: 1px solid var(--color-border);
+				border-radius: 8px;
+				background: var(--color-bg-secondary);
+			}
+			.limit-list li.binding {
+				border-color: var(--color-primary);
+				background: #f5f7ff;
+			}
+			.limit-list .limit-name {
+				color: var(--color-text-secondary);
+			}
+			.limit-list li.binding .limit-name {
+				color: var(--color-primary-dark);
+				font-weight: 600;
+			}
+			.limit-list .limit-value {
+				font-weight: 600;
+				white-space: nowrap;
+			}
+			.limit-list .limit-value.inactive {
+				color: var(--color-muted);
+				font-weight: 500;
+			}
+
+			/* 자금 스케줄 */
+			.schedule {
+				margin-top: 0.9rem;
+				font-size: 0.8rem;
+				color: var(--color-text);
+				line-height: 1.7;
+			}
+			.schedule strong {
+				color: var(--color-primary-dark);
+			}
+
+			/* 표 */
+			.table-wrap {
+				overflow-x: auto;
+				-webkit-overflow-scrolling: touch;
+			}
+			table.ref {
+				width: 100%;
+				border-collapse: collapse;
+				font-size: 0.8rem;
+				min-width: 420px;
+			}
+			table.ref th,
+			table.ref td {
+				border: 1px solid var(--color-border);
+				padding: 0.5rem 0.6rem;
+				text-align: left;
+				vertical-align: top;
+				line-height: 1.5;
+			}
+			table.ref th {
+				background: var(--color-bg-secondary);
+				font-weight: 600;
+				white-space: nowrap;
+			}
+
+			/* 청약 종류별 블록 */
+			.type-list {
+				display: flex;
+				flex-direction: column;
+				gap: 0.75rem;
+			}
+			.type-item {
+				border: 1px solid var(--color-border);
+				border-radius: 10px;
+				padding: 0.9rem 1rem;
+			}
+			.type-item h3 {
+				font-size: 0.92rem;
+				font-weight: 600;
+				margin: 0 0 0.5rem;
+				display: flex;
+				align-items: center;
+				gap: 0.5rem;
+				flex-wrap: wrap;
+			}
+			.type-item .tag {
+				font-size: 0.68rem;
+				font-weight: 600;
+				border-radius: 999px;
+				padding: 0.12rem 0.55rem;
+				background: #eef2ff;
+				color: var(--color-primary);
+				white-space: nowrap;
+			}
+			.type-item .tag.rent {
+				background: #ecfdf5;
+				color: #047857;
+			}
+			.type-item dl {
+				margin: 0;
+				display: grid;
+				grid-template-columns: 5.5rem minmax(0, 1fr);
+				gap: 0.35rem 0.6rem;
+				font-size: 0.8rem;
+				line-height: 1.6;
+			}
+			.type-item dt {
+				color: var(--color-text-secondary);
+				font-weight: 600;
+			}
+			.type-item dd {
+				margin: 0;
+			}
+
+			.disclaimer {
+				font-size: 0.78rem;
+				color: var(--color-text-secondary);
+				line-height: 1.6;
+				background: #fffbeb;
+				border: 1px solid #fde68a;
+				border-radius: 10px;
+				padding: 0.8rem 0.95rem;
+				margin-bottom: 1.25rem;
+			}
+			.disclaimer strong {
+				color: #b45309;
+			}
+
+			.link-list {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 0.4rem;
+				font-size: 0.82rem;
+			}
+			.link-list a {
+				color: var(--color-primary);
+				text-decoration: none;
+			}
+
+			@media (max-width: 420px) {
+				.card {
+					padding: 1rem;
+				}
+				.field-grid {
+					grid-template-columns: 1fr;
+				}
+				.type-item dl {
+					grid-template-columns: 1fr;
+					gap: 0.1rem;
+				}
+				.type-item dd {
+					margin-bottom: 0.35rem;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main class="container">
+			<h1 class="page-title">대출</h1>
+			<p class="page-subtitle">청약 종류별로 어떤 대출을 얼마나 받을 수 있는지 정리하고, LTV·DSR 한도를 계산해 봅니다.</p>
+
+			<details class="info-box">
+				<summary>❓ LTV · DTI · DSR이 뭔지 궁금하다면</summary>
+				<div class="info-body">
+					<p><strong>LTV(주택담보대출비율)</strong>: <em>집값</em> 기준 한도입니다. 집값 × LTV% 까지만 빌려줍니다. 지역(규제/비규제)과 보유 주택 수, 생애최초 여부에 따라 비율이 달라집니다.</p>
+					<p><strong>DTI(총부채상환비율)</strong>: <em>소득</em> 대비 "주담대 원리금 + 다른 대출 이자"의 비율입니다. 지금은 DSR에 가려 보조 지표로 쓰입니다.</p>
+					<p><strong>DSR(총부채원리금상환비율)</strong>: <em>소득</em> 기준 한도입니다. 내가 가진 <strong>모든</strong> 대출의 연간 원리금 합계가 연소득의 일정 비율(은행권 40%, 2금융권 50%)을 넘으면 안 됩니다. 실무에서는 LTV보다 DSR에서 먼저 막히는 경우가 많습니다.</p>
+					<p><strong>스트레스 DSR</strong>: DSR을 계산할 때 실제 금리가 아니라 앞으로 금리가 오를 것을 가정한 <strong>가산금리(스트레스 금리)</strong>를 더한 금리로 원리금을 계산합니다. 그만큼 한도가 줄어듭니다. 가산폭은 시행 단계·지역·대출 유형(변동/혼합/주기형)에 따라 다릅니다.</p>
+					<p><strong>총액한도</strong>: 비율과 별개로 "수도권·규제지역 주택구입 주담대는 최대 ○억원"처럼 금액 자체에 상한을 두는 규제입니다. LTV·DSR을 통과해도 이 금액을 넘길 수 없습니다.</p>
+					<p>실제 한도는 <strong>LTV 한도 · DSR 한도 · 총액한도 중 가장 작은 값</strong>으로 정해집니다.</p>
+				</div>
+			</details>
+
+			<div class="disclaimer">
+				<strong>⚠️ 참고용 계산기입니다.</strong> 아래 기본값은 2025년 6·27 대책과 10·15 대책 이후 알려진 기준을 정리한 것으로, 부동산 대책·규제지역 지정에 따라 <strong>수시로 바뀝니다</strong>. 실제 한도는 은행 심사(소득 인정 방식, 신용, 담보 감정가, 사업장별 집단대출 협약)에 따라 달라지므로 반드시 금융기관과 최신 공식 발표로 확인하세요.
+			</div>
+
+			<!-- 대출 한도 계산기 -->
+			<section class="card">
+				<h2>대출 한도 계산기</h2>
+				<p class="card-desc">분양가(집값)와 소득을 넣으면 LTV·DSR·총액한도를 각각 계산해, 그중 가장 작은 값을 최대 대출 가능액으로 보여줍니다. 금액은 모두 <strong>만원</strong> 단위입니다.</p>
+
+				<div class="field-grid">
+					<div class="field full">
+						<label for="price">분양가 / 집값 (만원)</label>
+						<input type="number" id="price" value="60000" min="0" step="1000" inputmode="numeric" />
+						<span class="hint">예: 6억원 → 60000</span>
+					</div>
+
+					<div class="field">
+						<label for="ltv-preset">지역 · 조건 (LTV)</label>
+						<select id="ltv-preset">
+							<option value="40">규제지역(투기과열·조정대상) 40%</option>
+							<option value="70" selected>비규제지역 · 무주택 70%</option>
+							<option value="80">비규제지역 · 생애최초 80%</option>
+							<option value="0">다주택자 · 규제지역 0%(대출 불가)</option>
+							<option value="custom">직접 입력</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="ltv">적용 LTV (%)</label>
+						<input type="number" id="ltv" value="70" min="0" max="100" step="1" inputmode="numeric" />
+					</div>
+
+					<div class="field full">
+						<label class="checkline"><input type="checkbox" id="cap-on" /> 수도권·규제지역 총액한도 적용 (15억 이하 6억 / 15억~25억 4억 / 25억 초과 2억)</label>
+					</div>
+
+					<div class="field">
+						<label for="income">연소득 (만원)</label>
+						<input type="number" id="income" value="6000" min="0" step="100" inputmode="numeric" />
+					</div>
+					<div class="field">
+						<label for="existing">기존 대출 연간 원리금 (만원)</label>
+						<input type="number" id="existing" value="0" min="0" step="10" inputmode="numeric" />
+						<span class="hint">신용대출·자동차할부 등 모두 포함</span>
+					</div>
+
+					<div class="field">
+						<label for="dsr">DSR 한도 (%)</label>
+						<select id="dsr">
+							<option value="40" selected>은행권 40%</option>
+							<option value="50">제2금융권 50%</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="stress">스트레스 가산금리 (%p)</label>
+						<input type="number" id="stress" value="1.5" min="0" max="5" step="0.25" inputmode="decimal" />
+						<span class="hint">DSR 계산에만 더해지는 가산폭</span>
+					</div>
+
+					<div class="field">
+						<label for="rate">대출금리 (연 %)</label>
+						<input type="number" id="rate" value="4.0" min="0" max="20" step="0.1" inputmode="decimal" />
+					</div>
+					<div class="field">
+						<label for="years">만기 (년)</label>
+						<input type="number" id="years" value="30" min="1" max="50" step="1" inputmode="numeric" />
+						<span class="hint">원리금균등 기준</span>
+					</div>
+				</div>
+
+				<div class="result">
+					<div class="result-main">
+						<div class="label">예상 최대 대출 가능액</div>
+						<div class="value" id="final-amount">-</div>
+						<div class="note" id="final-note"></div>
+					</div>
+
+					<ul class="limit-list">
+						<li id="row-ltv">
+							<span class="limit-name">LTV 한도 <span id="ltv-formula"></span></span>
+							<span class="limit-value" id="ltv-amount">-</span>
+						</li>
+						<li id="row-dsr">
+							<span class="limit-name">DSR 한도 <span id="dsr-formula"></span></span>
+							<span class="limit-value" id="dsr-amount">-</span>
+						</li>
+						<li id="row-cap">
+							<span class="limit-name">총액한도 <span id="cap-formula"></span></span>
+							<span class="limit-value" id="cap-amount">-</span>
+						</li>
+					</ul>
+
+					<div class="schedule" id="schedule"></div>
+				</div>
+			</section>
+
+			<!-- 청약 종류별 대출 구조 -->
+			<section class="card">
+				<h2>청약 종류별 대출 구조</h2>
+				<p class="card-desc">이 사이트에서 조회하는 5가지 공고 유형별로, 실제로 어떤 대출을 쓰게 되는지 정리했습니다.</p>
+
+				<div class="type-list">
+					<div class="type-item">
+						<h3>APT 분양정보 <span class="tag">분양(구입)</span></h3>
+						<dl>
+							<dt>자금 순서</dt>
+							<dd>계약금(분양가 10~20%, 현금) → 중도금(통상 60%, 여러 회차 분납) → 잔금(20~30%, 입주 시)</dd>
+							<dt>중도금대출</dt>
+							<dd>시행사와 협약한 은행의 <strong>집단대출</strong>입니다. 보통 분양가의 40~60%까지이며, 보증기관(HUG·HF) 보증과 사업장 조건에 따라 가능 여부·한도가 달라집니다. 집단 중도금대출은 <strong>DSR 산정에서 제외</strong>되는 것이 일반적입니다.</dd>
+							<dt>잔금대출</dt>
+							<dd>입주 시점에 중도금대출을 갚으면서 일반 주택담보대출로 전환합니다. <strong>이때부터 DSR이 적용</strong>되고, 담보 기준도 분양가가 아니라 <strong>입주 시점 감정가(또는 분양가 중 낮은 금액)</strong>가 되는 경우가 많아 예상보다 한도가 줄 수 있습니다.</dd>
+							<dt>주의</dt>
+							<dd>규제지역·수도권은 LTV와 총액한도, 전입 의무가 함께 걸립니다. 중도금대출이 나왔다고 잔금대출이 같은 금액으로 자동 승계되지는 않습니다.</dd>
+						</dl>
+					</div>
+
+					<div class="type-item">
+						<h3>오피스텔 / 도시형 / 생활숙박시설 <span class="tag">분양(구입)</span></h3>
+						<dl>
+							<dt>담보 성격</dt>
+							<dd><strong>오피스텔·생활숙박시설은 주택이 아닌 비주택 담보</strong>로 분류돼 주택 LTV 규제와 다른 기준이 적용됩니다. 반면 도시형생활주택은 주택이라 주담대 규제·주택 수 산정 대상입니다.</dd>
+							<dt>한도</dt>
+							<dd>비주택 담보대출은 통상 감정가의 50~70% 수준에서 금융기관이 자체 기준으로 정합니다. 다만 <strong>DSR은 동일하게 적용</strong>됩니다.</dd>
+							<dt>주의</dt>
+							<dd>주거용으로 쓰는 오피스텔은 세법·청약에서 주택으로 잡힐 수 있고, 생활숙박시설은 주거 사용이 제한돼 주택담보대출·전세자금대출이 어려울 수 있습니다.</dd>
+						</dl>
+					</div>
+
+					<div class="type-item">
+						<h3>APT 잔여세대 (무순위·줍줍) <span class="tag">분양(구입)</span></h3>
+						<dl>
+							<dt>자금 순서</dt>
+							<dd>이미 공사가 진행됐거나 입주가 임박한 물량이 많아 <strong>계약 후 잔금까지 기간이 짧습니다.</strong> 중도금·잔금을 한꺼번에 요구하는 경우도 있습니다.</dd>
+							<dt>중도금대출</dt>
+							<dd>남은 회차가 적거나 집단대출 협약이 끝나 <strong>중도금대출이 아예 없는 경우</strong>가 흔합니다. 공고문의 대출 알선 여부를 반드시 확인하세요.</dd>
+							<dt>잔금대출</dt>
+							<dd>일반 주택담보대출로 직접 받아야 하며 LTV·DSR·총액한도가 모두 적용됩니다.</dd>
+							<dt>주의</dt>
+							<dd>청약통장·순위는 필요 없지만 <strong>현금 부담은 가장 큰 유형</strong>입니다. 계약 전에 잔금대출 가능액을 먼저 계산해 두세요.</dd>
+						</dl>
+					</div>
+
+					<div class="type-item">
+						<h3>공공지원 민간임대 <span class="tag rent">임대(전월세)</span></h3>
+						<dl>
+							<dt>자금 성격</dt>
+							<dd>매매가 아니라 <strong>보증금 + 월세</strong>입니다. 주택담보대출이 아니라 <strong>전세자금(보증금) 대출</strong>을 씁니다.</dd>
+							<dt>대출 종류</dt>
+							<dd>버팀목 전세자금대출, 중소기업 취업청년 전세대출, 청년·신혼부부 전용 상품 등 정책 대출과 은행 전세대출(HUG·HF·SGI 보증)을 활용합니다.</dd>
+							<dt>한도</dt>
+							<dd>보증금의 일정 비율(보통 80% 내외)과 상품별 최대한도(소득·나이·자녀 수 요건)로 정해집니다. 전세대출은 <strong>원금이 DSR에 잡히지 않고 이자만 반영</strong>되는 것이 일반적입니다.</dd>
+							<dt>주의</dt>
+							<dd>임대 운영사와 협약된 대출만 가능한 경우가 있어, 모집공고의 "대출 안내" 항목을 먼저 확인해야 합니다.</dd>
+						</dl>
+					</div>
+
+					<div class="type-item">
+						<h3>임의공급 <span class="tag">분양(구입)</span></h3>
+						<dl>
+							<dt>자금 순서</dt>
+							<dd>시행사가 자체 기준으로 공급하는 물량이라 계약금 비율·납부 일정이 사업장마다 제각각입니다. 계약 취소분 재공급, 임대 후 분양전환 등 사례가 섞여 있습니다.</dd>
+							<dt>중도금대출</dt>
+							<dd>잔여 물량 성격이라 집단대출이 없는 경우가 많고, 있어도 시행사 알선 조건(금리·한도)이 일반 상품과 다를 수 있습니다.</dd>
+							<dt>잔금대출</dt>
+							<dd>일반 주택담보대출 기준(LTV·DSR·총액한도)을 그대로 적용받습니다.</dd>
+							<dt>주의</dt>
+							<dd>분양전환 물량은 <strong>기존 임차보증금이 분양대금에 충당</strong>되는 구조인지 확인해야 실제 필요한 대출액이 나옵니다.</dd>
+						</dl>
+					</div>
+				</div>
+			</section>
+
+			<!-- 규제 요약 -->
+			<section class="card">
+				<h2>규제 기준 요약</h2>
+				<p class="card-desc">2026년 9월 시점에 정리한 참고값입니다. 규제지역 지정과 대책 발표에 따라 바뀌므로 최신 공식 발표를 함께 확인하세요.</p>
+
+				<div class="table-wrap">
+					<table class="ref">
+						<thead>
+							<tr>
+								<th>구분</th>
+								<th>규제지역<br />(투기과열·조정대상)</th>
+								<th>비규제지역</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>무주택 · 1주택(처분조건부)</td>
+								<td>LTV 40%</td>
+								<td>LTV 70%</td>
+							</tr>
+							<tr>
+								<td>생애최초</td>
+								<td>수도권·규제지역은 LTV 70%로 축소(6·27 대책)</td>
+								<td>LTV 80%</td>
+							</tr>
+							<tr>
+								<td>다주택자</td>
+								<td>주택구입 목적 대출 불가(0%)</td>
+								<td>금융기관 자체 기준</td>
+							</tr>
+							<tr>
+								<td>총액한도<br />(수도권·규제지역)</td>
+								<td colspan="2">집값 15억 이하 6억원 / 15억 초과~25억 이하 4억원 / 25억 초과 2억원</td>
+							</tr>
+							<tr>
+								<td>DSR</td>
+								<td colspan="2">은행권 40%, 제2금융권 50% · 스트레스 DSR 가산금리 별도 적용</td>
+							</tr>
+							<tr>
+								<td>전입 의무</td>
+								<td colspan="2">수도권·규제지역 주택구입 주담대는 6개월 내 전입 의무</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+
+			<!-- 체크리스트 -->
+			<section class="card">
+				<h2>청약 전 대출 체크리스트</h2>
+				<div class="table-wrap">
+					<table class="ref">
+						<tbody>
+							<tr>
+								<th>① 공고문</th>
+								<td>중도금대출 알선 여부, 이자 후불제/무이자 조건, 계약금 비율과 납부 일정</td>
+							</tr>
+							<tr>
+								<th>② 규제 여부</th>
+								<td>해당 주소가 규제지역인지, 총액한도·전입 의무 대상인지</td>
+							</tr>
+							<tr>
+								<th>③ 내 소득</th>
+								<td>기존 신용대출·할부까지 합쳐 DSR이 몇 %인지 (DSR에서 먼저 막히는 경우가 많음)</td>
+							</tr>
+							<tr>
+								<th>④ 잔금 시점</th>
+								<td>입주 시점 감정가 기준으로 다시 계산 — 중도금대출 금액이 그대로 이어지지 않음</td>
+							</tr>
+							<tr>
+								<th>⑤ 현금</th>
+								<td>계약금 + 취득세 + 발코니 확장·옵션비는 대출이 안 되는 경우가 많음</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="card">
+				<h2>공식 확인처</h2>
+				<ul class="link-list">
+					<li><a href="https://www.applyhome.co.kr" target="_blank" rel="noopener">청약홈 — 모집공고문 원문(대출 안내 포함)</a></li>
+					<li><a href="https://nhuf.molit.go.kr" target="_blank" rel="noopener">주택도시기금 — 버팀목·디딤돌 등 정책 대출 요건</a></li>
+					<li><a href="https://www.fsc.go.kr" target="_blank" rel="noopener">금융위원회 — 가계부채 관리방안 등 대책 원문</a></li>
+					<li><a href="https://www.khug.or.kr" target="_blank" rel="noopener">HUG 주택도시보증공사 — 중도금대출 보증</a></li>
+				</ul>
+			</section>
+		</main>
+
+		<footer class="site-footer">
+			<div class="container">
+				<p>대출 한도는 참고용 계산 결과이며 실제 승인 금액과 다를 수 있습니다.</p>
+			</div>
+		</footer>
+
+		<script src="/assets/logout.js" defer></script>
+		<script>
+			(function () {
+				const $ = (id) => document.getElementById(id);
+				const inputs = ["price", "ltv", "income", "existing", "dsr", "stress", "rate", "years"].map($);
+				const ltvPreset = $("ltv-preset");
+				const capOn = $("cap-on");
+
+				const num = (el) => {
+					const v = Number(el.value);
+					return Number.isFinite(v) && v > 0 ? v : 0;
+				};
+
+				// 만원 단위 숫자를 "○억 ○○○만원" 형태로 표시
+				function fmt(manwon) {
+					if (!Number.isFinite(manwon)) return "-";
+					const rounded = Math.floor(manwon);
+					if (rounded <= 0) return "0원";
+					const eok = Math.floor(rounded / 10000);
+					const rest = rounded % 10000;
+					if (eok > 0) return rest > 0 ? `${eok}억 ${rest.toLocaleString()}만원` : `${eok}억원`;
+					return `${rest.toLocaleString()}만원`;
+				}
+
+				// 원리금균등 상환 기준으로, 연간 상환 가능액에서 빌릴 수 있는 원금을 역산
+				function principalFromAnnualPayment(annualPayment, annualRatePct, years) {
+					const n = years * 12;
+					const r = annualRatePct / 100 / 12;
+					const monthly = annualPayment / 12;
+					if (monthly <= 0 || n <= 0) return 0;
+					if (r <= 0) return monthly * n;
+					return (monthly * (1 - Math.pow(1 + r, -n))) / r;
+				}
+
+				// 수도권·규제지역 주택가격별 총액한도 (만원 단위)
+				function totalCap(priceManwon) {
+					if (priceManwon <= 150000) return 60000;
+					if (priceManwon <= 250000) return 40000;
+					return 20000;
+				}
+
+				function calc() {
+					const price = num($("price"));
+					const ltv = Number($("ltv").value) || 0;
+					const income = num($("income"));
+					const existing = Number($("existing").value) || 0;
+					const dsrRatio = Number($("dsr").value) || 0;
+					const stress = Number($("stress").value) || 0;
+					const rate = Number($("rate").value) || 0;
+					const years = num($("years")) || 30;
+
+					const ltvLimit = (price * ltv) / 100;
+
+					const annualCapacity = (income * dsrRatio) / 100 - existing;
+					const dsrLimit = annualCapacity > 0 ? principalFromAnnualPayment(annualCapacity, rate + stress, years) : 0;
+
+					const capApplied = capOn.checked;
+					const capLimit = capApplied ? totalCap(price) : Infinity;
+
+					const limits = [
+						{ key: "ltv", name: "LTV 한도", value: ltvLimit },
+						{ key: "dsr", name: "DSR 한도", value: dsrLimit },
+						{ key: "cap", name: "총액한도", value: capLimit },
+					];
+					const final = Math.min(...limits.map((l) => l.value));
+					const binding = limits.filter((l) => Number.isFinite(l.value) && l.value === final);
+
+					$("final-amount").textContent = Number.isFinite(final) ? fmt(final) : "-";
+					$("final-note").textContent =
+						price > 0 && Number.isFinite(final)
+							? `${binding.map((b) => b.name).join(" / ")}에서 막힙니다. 필요한 자기자금은 약 ${fmt(Math.max(price - final, 0))} (취득세·옵션비 별도).`
+							: "금액을 입력하세요.";
+
+					$("ltv-amount").textContent = fmt(ltvLimit);
+					$("ltv-formula").textContent = `(${fmt(price)} × ${ltv}%)`;
+
+					$("dsr-amount").textContent = fmt(dsrLimit);
+					$("dsr-formula").textContent = `(연 상환여력 ${fmt(Math.max(annualCapacity, 0))} · 적용금리 ${(rate + stress).toFixed(2)}% · ${years}년)`;
+
+					const capEl = $("cap-amount");
+					capEl.textContent = capApplied ? fmt(capLimit) : "미적용";
+					capEl.classList.toggle("inactive", !capApplied);
+					$("cap-formula").textContent = capApplied ? `(집값 ${fmt(price)} 구간)` : "(수도권·규제지역만 해당)";
+
+					for (const l of limits) {
+						$(`row-${l.key}`).classList.toggle("binding", binding.some((b) => b.key === l.key));
+					}
+
+					// 분양 물건 기준 자금 스케줄 (계약금 10% / 중도금 60% / 잔금 30% 가정)
+					$("schedule").innerHTML =
+						price > 0
+							? `<strong>분양 기준 자금 흐름(일반적인 10·60·30 가정)</strong><br />
+								계약금 10% ≈ ${fmt(price * 0.1)}(현금) · 중도금 60% ≈ ${fmt(price * 0.6)}(집단대출 대상) · 잔금 30% ≈ ${fmt(price * 0.3)}<br />
+								잔금 시점에는 중도금대출까지 합쳐 <strong>${fmt(price * 0.9)}</strong>를 주택담보대출 ${fmt(final)} + 자기자금으로 정리해야 합니다.`
+							: "";
+				}
+
+				ltvPreset.addEventListener("change", () => {
+					if (ltvPreset.value !== "custom") $("ltv").value = ltvPreset.value;
+					// 규제지역·다주택 프리셋을 고르면 총액한도도 자동으로 켜 준다
+					if (ltvPreset.value === "40" || ltvPreset.value === "0") capOn.checked = true;
+					calc();
+				});
+				$("ltv").addEventListener("input", () => {
+					ltvPreset.value = "custom";
+				});
+				for (const el of inputs) el.addEventListener("input", calc);
+				capOn.addEventListener("change", calc);
+				calc();
+			})();
+		</script>
+	</body>
+</html>

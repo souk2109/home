@@ -116,9 +116,15 @@
 	border-top: 1px solid var(--color-border);
 	background: var(--color-bg-secondary);
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-	gap: 0.6rem 1.2rem;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 0.6rem 1rem;
 	font-size: 0.8rem;
+}
+/* 그리드 아이템은 기본적으로 min-width:auto라 내용이 길면 트랙 폭을 넘어 넘칠 수 있음(body의
+   overflow-x:hidden 때문에 글자가 잘려 보이는 원인) - 0으로 낮춰 트랙 폭 안에서 줄바꿈하도록 강제 */
+.card-detail > div,
+.model-row > div {
+	min-width: 0;
 }
 .card-detail dt {
 	color: var(--color-text-secondary);
@@ -140,6 +146,13 @@
 	border-radius: 3px;
 	font-weight: 600;
 	color: #713f12;
+}
+.highlight-danger {
+	background: #fca5a5;
+	padding: 0.05rem 0.35rem;
+	border-radius: 3px;
+	font-weight: 600;
+	color: var(--color-text);
 }
 
 .model-section {
@@ -163,6 +176,11 @@
 	gap: 0.5rem 1rem;
 	font-size: 0.8rem;
 }
+.row-divider {
+	grid-column: 1 / -1;
+	border-top: 1px dashed var(--color-border);
+	margin: 0.15rem 0;
+}
 .model-row:last-child {
 	margin-bottom: 0;
 }
@@ -184,6 +202,84 @@
 .model-error {
 	margin: 0;
 	font-size: 0.8rem;
+	color: var(--color-error);
+}
+
+.transit-section {
+	border-top: 2px solid var(--color-border);
+	padding: 1rem 1rem 1.1rem;
+}
+.transit-btn {
+	padding: 0.5rem 1rem;
+	background: var(--color-primary);
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+.transit-btn:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+.transit-body {
+	margin-top: 0.7rem;
+}
+.transit-item {
+	padding: 0.6rem 0;
+	border-bottom: 1px dashed var(--color-border);
+}
+.transit-item:last-child {
+	border-bottom: none;
+}
+.transit-dest-title {
+	font-weight: 700;
+	font-size: 0.85rem;
+	color: var(--color-text);
+	margin-bottom: 0.3rem;
+}
+.transit-option-wrap {
+	margin-left: 0.2rem;
+}
+.transit-option {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.3rem 0;
+	font-size: 0.82rem;
+}
+.transit-option-clickable {
+	cursor: pointer;
+}
+.transit-option-clickable:hover .transit-option-label {
+	color: var(--color-primary);
+}
+.transit-option-disabled {
+	color: var(--color-text-secondary);
+}
+.transit-option-label {
+	font-weight: 600;
+	color: var(--color-text);
+	flex-shrink: 0;
+	min-width: 4.5em;
+}
+.transit-detail {
+	padding: 0 0 0.5rem 1.6rem;
+	font-size: 0.8rem;
+	color: var(--color-text-secondary);
+}
+.transit-leg {
+	padding: 0.15rem 0;
+}
+.transit-loading,
+.transit-empty,
+.transit-error {
+	margin: 0;
+	font-size: 0.8rem;
+	color: var(--color-text-secondary);
+}
+.transit-option .transit-error {
 	color: var(--color-error);
 }
 
@@ -229,8 +325,16 @@
 	white-space: nowrap;
 }
 
-@media (max-width: 420px) {
+@media (max-width: 340px) {
 	.card-detail {
 		grid-template-columns: 1fr;
+	}
+}
+
+/* 모바일 폭에 맞춘 150px 기준 컬럼은 웹(넓은 화면)에서 "1순위 해당지역 접수" 같은 긴 라벨+값이
+   너무 좁은 칸에 끼여 잘려 보이는 원인이었음 - 태블릿/데스크톱 폭에서는 칸을 더 넓게 확보 */
+@media (min-width: 640px) {
+	.card-detail {
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 	}
 }

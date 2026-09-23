@@ -5,6 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>개인설정 - 청약 정보</title>
 		<link rel="stylesheet" href="/assets/site.css" />
+		<script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 		<style>
 			.settings-container {
 				max-width: 640px;
@@ -256,6 +257,102 @@
 				animation: slideOut 0.25s ease-out forwards;
 			}
 
+			/* 대중교통 목적지 */
+			.dest-row {
+				margin-bottom: 1rem;
+			}
+
+			.dest-row:last-child {
+				margin-bottom: 0;
+			}
+
+			.dest-input-row {
+				display: flex;
+				gap: 0.5rem;
+				flex-wrap: wrap;
+			}
+
+			.dest-input-row input {
+				padding: 0.55rem 0.75rem;
+				border: 1px solid var(--color-border);
+				border-radius: 8px;
+				font-size: 0.9rem;
+				font-family: inherit;
+			}
+
+			.dest-input-row input:focus {
+				outline: none;
+				border-color: var(--color-primary);
+				box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.12);
+			}
+
+			.dest-address-input {
+				background: var(--color-bg-secondary);
+				cursor: pointer;
+			}
+
+			/* 주소 검색 모달 */
+			.modal-overlay {
+				position: fixed;
+				inset: 0;
+				background: rgba(0, 0, 0, 0.5);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				z-index: 2000;
+				padding: 1rem;
+			}
+
+			.modal-overlay[hidden] {
+				display: none;
+			}
+
+			.modal-box {
+				background: #fff;
+				border-radius: 12px;
+				width: min(480px, 100%);
+				max-height: 85vh;
+				overflow: hidden;
+				display: flex;
+				flex-direction: column;
+				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+			}
+
+			.modal-header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 0.9rem 1rem;
+				border-bottom: 1px solid var(--color-border);
+				font-weight: 600;
+				flex-shrink: 0;
+			}
+
+			.modal-header button {
+				background: none;
+				border: none;
+				font-size: 1.4rem;
+				line-height: 1;
+				cursor: pointer;
+				color: var(--color-text-secondary);
+				padding: 0.2rem 0.4rem;
+			}
+
+			#address-modal-body {
+				height: 450px;
+				max-height: 65vh;
+			}
+
+			.dest-label-input {
+				flex: 0 1 140px;
+				min-width: 100px;
+			}
+
+			.dest-address-input {
+				flex: 1 1 240px;
+				min-width: 0;
+			}
+
 			@media (max-width: 420px) {
 				.card {
 					padding: 1.1rem;
@@ -371,8 +468,34 @@
 
 					<div id="exclude-area-list" class="area-list"></div>
 				</div>
+
+				<div class="card">
+					<div class="card-header">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<rect x="3" y="11" width="18" height="10" rx="1" />
+							<path d="M5 11V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" />
+							<line x1="9" y1="21" x2="9" y2="11" />
+						</svg>
+						<div>
+							<h2>대중교통 목적지</h2>
+							<p>청약 공고 주소에서 아래 목적지 3곳까지의 대중교통 소요시간을 계산할 때 사용합니다. 별명과 주소를 입력하고 저장하면 좌표로 변환해서 저장됩니다.</p>
+						</div>
+					</div>
+
+					<div id="transit-dest-list"></div>
+				</div>
 			</div>
 		</main>
+
+		<div id="address-modal-overlay" class="modal-overlay" hidden>
+			<div class="modal-box">
+				<div class="modal-header">
+					<span>주소 검색</span>
+					<button type="button" id="address-modal-close" aria-label="닫기">×</button>
+				</div>
+				<div id="address-modal-body"></div>
+			</div>
+		</div>
 
 		<footer class="site-footer">
 			<div class="container">
@@ -557,6 +680,97 @@
 			});
 
 			loadCities();
+
+			// 대중교통 목적지: 개수는 3개 고정(dest1~dest3)이고, 각 슬롯의 별명만 사용자가 자유롭게 지정한다.
+			// 저장 시 서버에서 Tmap 지오코딩까지 처리하므로, 여기서는 별명+주소만 그대로 보낸다.
+			async function setupTransitDestinations() {
+				const listEl = document.getElementById("transit-dest-list");
+
+				try {
+					const res = await fetch("/api/settings/transit-destinations");
+					if (!res.ok) throw new Error("조회 실패");
+					const data = await res.json();
+					const destinations = data.destinations ?? [];
+
+					listEl.innerHTML = destinations
+						.map(
+							(dest) => `
+						<div class="dest-row">
+							<div class="dest-input-row">
+								<input type="text" class="dest-label-input" data-key="${dest.destKey}" placeholder="별명 (예: 회사)" value="${dest.label.replace(/"/g, "&quot;")}" />
+								<input type="text" class="dest-address-input" data-key="${dest.destKey}" placeholder="클릭해서 주소 검색" value="${dest.address.replace(/"/g, "&quot;")}" readonly />
+								<button type="button" class="btn dest-save-btn" data-key="${dest.destKey}">저장</button>
+							</div>
+						</div>
+					`,
+						)
+						.join("");
+
+					// 주소는 직접 타이핑하지 않고 다음(Daum) 우편번호 서비스를 모달 안에 임베드해서 검색해서 채운다
+					// (오타/이상한 주소 입력으로 인한 지오코딩 실패를 애초에 막기 위함). 별도 팝업 창 대신
+					// embed()로 페이지 내 모달(#address-modal-overlay)에 렌더링한다.
+					const addressModalOverlay = document.getElementById("address-modal-overlay");
+					const addressModalBody = document.getElementById("address-modal-body");
+					const addressModalClose = document.getElementById("address-modal-close");
+
+					function closeAddressModal() {
+						addressModalOverlay.hidden = true;
+						addressModalBody.innerHTML = "";
+					}
+
+					addressModalClose.addEventListener("click", closeAddressModal);
+					addressModalOverlay.addEventListener("click", (e) => {
+						if (e.target === addressModalOverlay) closeAddressModal();
+					});
+
+					function openAddressSearch(destKey) {
+						addressModalBody.innerHTML = "";
+						addressModalOverlay.hidden = false;
+						new daum.Postcode({
+							oncomplete: (data) => {
+								const input = listEl.querySelector(`.dest-address-input[data-key="${destKey}"]`);
+								if (input) input.value = data.roadAddress || data.address;
+								closeAddressModal();
+							},
+							width: "100%",
+							height: "100%",
+						}).embed(addressModalBody);
+					}
+
+					listEl.querySelectorAll(".dest-address-input").forEach((input) => {
+						input.addEventListener("click", () => openAddressSearch(input.dataset.key));
+					});
+
+					listEl.querySelectorAll(".dest-save-btn").forEach((btn) => {
+						btn.addEventListener("click", async () => {
+							const destKey = btn.dataset.key;
+							const label = listEl.querySelector(`.dest-label-input[data-key="${destKey}"]`).value.trim();
+							const address = listEl.querySelector(`.dest-address-input[data-key="${destKey}"]`).value.trim();
+							btn.disabled = true;
+							try {
+								const saveRes = await fetch("/api/settings/transit-destinations", {
+									method: "POST",
+									headers: { "content-type": "application/json" },
+									body: JSON.stringify({ destKey, label, address }),
+								});
+								if (!saveRes.ok) {
+									const errorData = await saveRes.json();
+									throw new Error(errorData.error || "저장 실패");
+								}
+								showMessage(label && address ? "목적지가 저장되었습니다." : "목적지가 삭제되었습니다.", "success");
+							} catch (err) {
+								showMessage(`오류: ${err.message}`, "error");
+							} finally {
+								btn.disabled = false;
+							}
+						});
+					});
+				} catch (err) {
+					showMessage(`오류: ${err.message}`, "error");
+				}
+			}
+
+			setupTransitDestinations();
 		</script>
 	</body>
 </html>

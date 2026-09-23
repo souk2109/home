@@ -143,11 +143,15 @@ CREATE INDEX IF NOT EXISTS idx_opt_listings_area_end ON opt_listings (SUBSCRPT_A
 CREATE INDEX IF NOT EXISTS idx_opt_listings_pblanc_de ON opt_listings (RCRIT_PBLANC_DE);
 
 -- 일일 배치(scheduled()) 실행 결과 로그. 타입별로 매 실행마다 한 행씩 남는다.
+-- row_count = 이번에 API에서 받아온 전체 건수(신규+갱신), new_count/updated_count = 그중 D1에 없던 신규 건수 / 이미 있던 갱신 건수
+-- (upsert 직전에 pkColumns 기준으로 기존 존재 여부를 조회해서 판정 - runListingsBatch() 참고)
 CREATE TABLE IF NOT EXISTS batch_runs (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	listing_type TEXT NOT NULL,
 	status TEXT NOT NULL, -- 'success' | 'failure'
 	row_count INTEGER,
+	new_count INTEGER,
+	updated_count INTEGER,
 	error_message TEXT,
 	ran_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -162,3 +166,37 @@ CREATE TABLE IF NOT EXISTS included_areas (
 	area_name TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- 대중교통 경로 조회용 목적지 3곳 고정 슬롯(dest1/dest2/dest3). 개수는 고정이지만
+-- 각 슬롯의 별명(label)은 사용자가 자유롭게 지정한다(예: "회사", "여자친구집").
+CREATE TABLE IF NOT EXISTS transit_destinations (
+	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	dest_key TEXT NOT NULL, -- 'dest1' | 'dest2' | 'dest3' 고정 3종
+	label TEXT NOT NULL,
+	address TEXT NOT NULL,
+	lng TEXT NOT NULL,
+	lat TEXT NOT NULL,
+	updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY (user_id, dest_key)
+);
+
+-- 청약 공고 좌표 -> 목적지 좌표 대중교통 경로 계산 결과 캐시.
+-- 사용자/목적지 슬롯과 무관하게 "이 청약 <-> 이 좌표" 조합 자체를 키로 쓴다 - 실제 경로 계산 결과는
+-- 누가 조회했는지와 상관없이 동일하므로, 다른 사용자가 같은 목적지 좌표로 조회해도 캐시를 공유해서
+-- TMAP 대중교통 API 무료 한도(일 10건)를 아낀다. 이 덕분에 사용자가 목적지 주소를 바꿔도 캐시를
+-- 따로 지울 필요가 없다 - 새 좌표는 자연히 새 캐시 키가 되고, 옛 좌표의 캐시는 그냥 안 쓰일 뿐이다.
+-- Tmap 전체 경로 API 호출 1번으로 받은 후보 경로들(최대 5개, 각각 시간/환승/요금/pathType/legs 포함)을
+-- itineraries_json 배열로 그대로 저장한다. "지하철/최단시간/최소환승" 3가지 추천은 이 배열에서
+-- 매번 계산해서 뽑아내므로(categorizeItineraries()), 캐시는 원본 후보 목록 하나만 들고 있으면 된다.
+CREATE TABLE IF NOT EXISTS transit_routes (
+	listing_type TEXT NOT NULL, -- LISTING_TYPES의 키 (apt/urbty/remndr/pblpvtrent/opt)
+	house_manage_no TEXT NOT NULL,
+	pblanc_no TEXT NOT NULL,
+	dest_lng TEXT NOT NULL,
+	dest_lat TEXT NOT NULL,
+	itineraries_json TEXT NOT NULL,
+	fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY (listing_type, house_manage_no, pblanc_no, dest_lng, dest_lat)
+);
+
+CREATE INDEX IF NOT EXISTS idx_transit_routes_listing ON transit_routes (listing_type, house_manage_no, pblanc_no);
